@@ -1,0 +1,27 @@
+name: task_manager
+description: A Flutter task manager application.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.2
+  timezone: ^0.9.1
+  qr_flutter: any
+  mobile_scanner: ^3.5.6
+  shared_preferences: ^2.2.2
+  window_manager: ^0.3.7
+  flutter_local_notifications: any
+  uuid: ^4.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
