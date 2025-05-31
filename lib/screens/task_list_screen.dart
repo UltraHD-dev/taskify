@@ -77,35 +77,79 @@ class _TaskListScreenState extends State<TaskListScreen> with WindowListener {
 
   Future<void> _loadTasks() async {
     final prefs = await SharedPreferences.getInstance();
+    
+    // Загружаем задачи
     final tasksJson = prefs.getString('tasks');
-    if (tasksJson == null) return;
-
-    try {
-      final List<dynamic> decoded = jsonDecode(tasksJson);
-      if (mounted) {
-        setState(() {
-          tasks = decoded.map((t) => Task.fromJson(t)).toList();
-          categories = tasks
-              .map((task) => task.category)
-              .where((category) => category.isNotEmpty)
-              .toSet()
-              .toList();
-        });
-        _rescheduleAllNotifications();
+    // Загружаем категории отдельно
+    final categoriesJson = prefs.getStringList('categories');
+    
+    if (tasksJson != null) {
+      try {
+        final List<dynamic> decoded = jsonDecode(tasksJson);
+        if (mounted) {
+          setState(() {
+            tasks = decoded.map((t) => Task.fromJson(t)).toList();
+            
+            // Загружаем сохраненные категории
+            if (categoriesJson != null) {
+              categories = List<String>.from(categoriesJson);
+            }
+            
+            // Обновляем список категорий из задач
+            _updateCategoriesFromTasks();
+          });
+          _rescheduleAllNotifications();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Ошибка загрузки задач')),
+          );
+        }
       }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Ошибка загрузки задач')),
-        );
+    } else {
+      // Если задач нет, загружаем только категории
+      if (categoriesJson != null && mounted) {
+        setState(() {
+          categories = List<String>.from(categoriesJson);
+        });
       }
     }
   }
 
+  void _updateCategoriesFromTasks() {
+    // Получаем все уникальные категории из задач
+    final taskCategories = tasks
+        .map((task) => task.category)
+        .where((category) => category.isNotEmpty)
+        .toSet();
+    
+    // Добавляем новые категории из задач в общий список
+    for (final category in taskCategories) {
+      if (!categories.contains(category)) {
+        categories.add(category);
+      }
+    }
+    
+    // Удаляем категории, которые больше не используются в задачах
+    categories.removeWhere((category) {
+      return !taskCategories.contains(category) && 
+             !tasks.any((task) => task.category == category);
+    });
+  }
+
   Future<void> _saveTasks() async {
     final prefs = await SharedPreferences.getInstance();
+    
+    // Обновляем категории перед сохранением
+    _updateCategoriesFromTasks();
+    
+    // Сохраняем задачи
     await prefs.setString(
         'tasks', jsonEncode(tasks.map((t) => t.toJson()).toList()));
+    
+    // Сохраняем категории отдельно
+    await prefs.setStringList('categories', categories);
   }
 
   Future<void> _rescheduleAllNotifications() async {
@@ -132,7 +176,6 @@ class _TaskListScreenState extends State<TaskListScreen> with WindowListener {
         ),
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      // Удален параметр uiLocalNotificationDateInterpretation
     );
   }
 
@@ -151,10 +194,12 @@ class _TaskListScreenState extends State<TaskListScreen> with WindowListener {
           content: SingleChildScrollView(
             child: Column(
               children: expiredTasks
-                  .map((task) => ListTile(
-                        title: Text(task.title),
-                        subtitle:
-                            Text('Просрочено: ${_formatDate(task.dueDate!)}'),
+                  .map((task) => Card(
+                        child: ListTile(
+                          title: Text(task.title),
+                          subtitle: Text('Просрочено: ${_formatDate(task.dueDate!)}'),
+                          leading: const Icon(Icons.warning, color: Colors.orange),
+                        ),
                       ))
                   .toList(),
             ),
@@ -175,37 +220,50 @@ class _TaskListScreenState extends State<TaskListScreen> with WindowListener {
       context: context,
       builder: (context) => TaskDialog(
         task: task,
-        categories: categories,
+        categories: List<String>.from(categories), // Передаем копию списка
+        onCategoriesUpdated: (updatedCategories) {
+          // Обновляем список категорий при изменении в диалоге
+          if (mounted) {
+            setState(() {
+              categories = updatedCategories;
+            });
+          }
+        },
         onSave: (newTask) async {
           if (!mounted) return;
 
           setState(() {
             if (task == null) {
               tasks.add(newTask);
-              if (!categories.contains(newTask.category)) {
-                categories.add(newTask.category);
-              }
             } else {
               final index = tasks.indexWhere((t) => t.id == newTask.id);
               if (index != -1) tasks[index] = newTask;
             }
+            
+            // Добавляем новую категорию в список, если её там нет
+            if (newTask.category.isNotEmpty && !categories.contains(newTask.category)) {
+              categories.add(newTask.category);
+            }
           });
+          
           await _saveTasks();
           await _scheduleNotification(newTask);
         },
       ),
     );
-    await _loadTasks();
   }
 
   Future<void> _toggleTaskComplete(String taskId) async {
     if (!mounted) return;
 
+    final taskIndex = tasks.indexWhere((t) => t.id == taskId);
+    if (taskIndex == -1) return;
+
     setState(() {
-      final task = tasks.firstWhere((t) => t.id == taskId);
-      task.isCompleted = !task.isCompleted;
-      task.updatedAt = DateTime.now();
+      tasks[taskIndex].isCompleted = !tasks[taskIndex].isCompleted;
+      tasks[taskIndex].updatedAt = DateTime.now();
     });
+    
     await _saveTasks();
     await notificationsPlugin.cancel(taskId.hashCode);
   }
@@ -221,10 +279,12 @@ class _TaskListScreenState extends State<TaskListScreen> with WindowListener {
                 onPressed: () => Navigator.pop(context, false),
                 child: const Text('Отмена'),
               ),
-              TextButton(
+              ElevatedButton(
                 onPressed: () => Navigator.pop(context, true),
-                child:
-                    const Text('Удалить', style: TextStyle(color: Colors.red)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                ),
+                child: const Text('Удалить'),
               ),
             ],
           ),
@@ -233,7 +293,7 @@ class _TaskListScreenState extends State<TaskListScreen> with WindowListener {
 
     if (shouldDelete && mounted) {
       setState(() => tasks.removeWhere((t) => t.id == taskId));
-      await _saveTasks();
+      await _saveTasks(); // Это автоматически обновит категории
       await notificationsPlugin.cancel(taskId.hashCode);
     }
   }
@@ -249,6 +309,7 @@ class _TaskListScreenState extends State<TaskListScreen> with WindowListener {
         : tasks.where((task) => !task.isCompleted).toList();
 
     return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         title: const Text('Менеджер задач'),
         actions: [
@@ -292,19 +353,30 @@ class _TaskListScreenState extends State<TaskListScreen> with WindowListener {
       ),
       body: filteredTasks.isEmpty
           ? _buildEmptyState()
-          : ListView.builder(
-              itemCount: filteredTasks.length,
-              itemBuilder: (context, index) => tile.TaskTile(
-                task: filteredTasks[index],
-                onToggleComplete: () =>
-                    _toggleTaskComplete(filteredTasks[index].id),
-                onEdit: () => _showTaskDialog(task: filteredTasks[index]),
-                onDelete: () => _deleteTask(filteredTasks[index].id),
+          : Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: ListView.separated(
+                itemCount: filteredTasks.length,
+                separatorBuilder: (context, index) => const SizedBox(height: 12),
+                itemBuilder: (context, index) => Card(
+                  child: tile.TaskTile(
+                    task: filteredTasks[index],
+                    onToggleComplete: () =>
+                        _toggleTaskComplete(filteredTasks[index].id),
+                    onEdit: () => _showTaskDialog(task: filteredTasks[index]),
+                    onDelete: () => _deleteTask(filteredTasks[index].id),
+                  ),
+                ),
               ),
             ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showTaskDialog(),
-        child: const Icon(Icons.add),
+        tooltip: 'Добавить задачу',
+        child: const Icon(
+          Icons.add,
+          size: 24,
+          color: Colors.white,
+        ),
       ),
     );
   }
@@ -314,14 +386,32 @@ class _TaskListScreenState extends State<TaskListScreen> with WindowListener {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.task_alt, size: 64, color: Colors.grey),
-          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primaryContainer,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.task_alt,
+              size: 64,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+          const SizedBox(height: 24),
           Text(
             'Нет задач',
-            style: Theme.of(context)
-                .textTheme
-                .headlineSmall
-                ?.copyWith(color: Colors.grey),
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Нажмите на кнопку ниже, чтобы добавить первую задачу',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
+            ),
+            textAlign: TextAlign.center,
           ),
         ],
       ),

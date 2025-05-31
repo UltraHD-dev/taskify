@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:taskify/screens/task_list_screen.dart';
+import 'package:taskify/theme/app_theme.dart';
 import 'package:window_manager/window_manager.dart';
 
 void main() async {
@@ -11,26 +12,19 @@ void main() async {
     await windowManager.ensureInitialized();
   }
   
-  runApp(const TaskManagerApp());
+  runApp(const TaskifyApp());
 }
 
-class TaskManagerApp extends StatelessWidget {
-  const TaskManagerApp({super.key});
+class TaskifyApp extends StatelessWidget {
+  const TaskifyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Планировщик задач',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        useMaterial3: true,
-        appBarTheme: AppBarTheme(
-          centerTitle: true,
-          elevation: 4,
-        ),
-      ),
-      home: const TaskListScreen(),
+      title: 'Taskify - Менеджер задач',
+      theme: AppTheme.lightTheme,
       debugShowCheckedModeBanner: false,
+      home: const TaskListScreen(),
     );
   }
 }
