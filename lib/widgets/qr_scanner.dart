@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:task_manager/models/task.dart';
+import 'package:taskify/models/task.dart';
 
 class QrScanner extends StatefulWidget {
   final List<Task> tasks;

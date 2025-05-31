@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:task_manager/models/task.dart';
+import 'package:taskify/models/task.dart';
 
 class TaskStorage {
   static const _tasksKey = 'tasks';
@@ -75,4 +75,4 @@ class TaskStorage {
       return 0;
     }
   }
-}
+} 

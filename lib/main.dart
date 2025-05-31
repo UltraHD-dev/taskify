@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:task_manager/screens/task_list_screen.dart';
+import 'package:taskify/screens/task_list_screen.dart';
 import 'package:window_manager/window_manager.dart';
 
 void main() async {
@@ -24,6 +24,10 @@ class TaskManagerApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
         useMaterial3: true,
+        appBarTheme: AppBarTheme(
+          centerTitle: true,
+          elevation: 4,
+        ),
       ),
       home: const TaskListScreen(),
       debugShowCheckedModeBanner: false,

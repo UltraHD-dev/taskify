@@ -3,10 +3,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:task_manager/models/task.dart';
-import 'package:task_manager/screens/task_dialog.dart';
-import 'package:task_manager/widgets/qr_scanner.dart';
-import 'package:task_manager/widgets/task_tile.dart' as tile;
+import 'package:taskify/models/task.dart';
+import 'package:taskify/screens/task_dialog.dart';
+import 'package:taskify/widgets/qr_scanner.dart';
+import 'package:taskify/widgets/task_tile.dart' as tile;
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:window_manager/window_manager.dart';
@@ -28,12 +28,12 @@ class _TaskListScreenState extends State<TaskListScreen> with WindowListener {
   @override
   void initState() {
     super.initState();
-    
+
     if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
       windowManager.addListener(this);
       _initWindow();
     }
-    
+
     tz.initializeTimeZones();
     _initNotifications();
     _loadTasks().then((_) => _checkExpiredTasks());
@@ -58,7 +58,7 @@ class _TaskListScreenState extends State<TaskListScreen> with WindowListener {
       skipTaskbar: false,
       titleBarStyle: TitleBarStyle.normal,
     );
-    
+
     await windowManager.waitUntilReadyToShow(windowOptions, () async {
       await windowManager.show();
       await windowManager.focus();
@@ -104,7 +104,8 @@ class _TaskListScreenState extends State<TaskListScreen> with WindowListener {
 
   Future<void> _saveTasks() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('tasks', jsonEncode(tasks.map((t) => t.toJson()).toList()));
+    await prefs.setString(
+        'tasks', jsonEncode(tasks.map((t) => t.toJson()).toList()));
   }
 
   Future<void> _rescheduleAllNotifications() async {
@@ -131,14 +132,16 @@ class _TaskListScreenState extends State<TaskListScreen> with WindowListener {
         ),
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      // Удален параметр uiLocalNotificationDateInterpretation
     );
   }
 
   Future<void> _checkExpiredTasks() async {
     final now = DateTime.now();
     final expiredTasks = tasks.where((task) =>
-        task.dueDate != null && task.dueDate!.isBefore(now) && !task.isCompleted);
+        task.dueDate != null &&
+        task.dueDate!.isBefore(now) &&
+        !task.isCompleted);
 
     if (expiredTasks.isNotEmpty && mounted) {
       showDialog(
@@ -150,8 +153,8 @@ class _TaskListScreenState extends State<TaskListScreen> with WindowListener {
               children: expiredTasks
                   .map((task) => ListTile(
                         title: Text(task.title),
-                        subtitle: Text(
-                            'Просрочено: ${_formatDate(task.dueDate!)}'),
+                        subtitle:
+                            Text('Просрочено: ${_formatDate(task.dueDate!)}'),
                       ))
                   .toList(),
             ),
@@ -220,7 +223,8 @@ class _TaskListScreenState extends State<TaskListScreen> with WindowListener {
               ),
               TextButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('Удалить', style: TextStyle(color: Colors.red)),
+                child:
+                    const Text('Удалить', style: TextStyle(color: Colors.red)),
               ),
             ],
           ),
@@ -240,8 +244,9 @@ class _TaskListScreenState extends State<TaskListScreen> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
-    final filteredTasks =
-        showCompleted ? tasks : tasks.where((task) => !task.isCompleted).toList();
+    final filteredTasks = showCompleted
+        ? tasks
+        : tasks.where((task) => !task.isCompleted).toList();
 
     return Scaffold(
       appBar: AppBar(
