@@ -11,28 +11,30 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.2
   timezone: ^0.10.1
-  qr_flutter: any
+  qr_flutter: ^4.1.0
   shared_preferences: ^2.2.2
+  file_picker: ^10.1.9
   window_manager: ^0.5.0
-  flutter_local_notifications: ^19.1.2  
+  flutter_local_notifications: ^19.1.2
   uuid: ^4.5.1
+  share_plus: ^11.0.0
+  mobile_scanner: ^7.0.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-  flutter_launcher_icons: ^0.13.1  
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
   assets:
-    - assets/icon.png 
+    - assets/icon.png
 
-  # Настройки генерации иконок
 flutter_launcher_icons:
   android: "launcher_icon"
-  ios: true  
-  image_path: "assets/icon.png"  
-  adaptive_icon_background: "#7E57C2"  
-  adaptive_icon_foreground: "assets/icon.png" 
-  min_sdk_android: 21  
+  ios: true
+  image_path: "assets/icon.png"
+  adaptive_icon_background: "#7E57C2"
+  adaptive_icon_foreground: "assets/icon.png"
+  min_sdk_android: 21

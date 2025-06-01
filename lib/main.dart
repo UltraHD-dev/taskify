@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:taskify/screens/task_list_screen.dart';
+import 'package:taskify/screens/file_manager_screen.dart'; 
 import 'package:taskify/theme/app_theme.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -15,8 +16,26 @@ void main() async {
   runApp(const TaskifyApp());
 }
 
-class TaskifyApp extends StatelessWidget {
+class TaskifyApp extends StatefulWidget {
   const TaskifyApp({super.key});
+
+  @override
+  State<TaskifyApp> createState() => _TaskifyAppState();
+}
+
+class _TaskifyAppState extends State<TaskifyApp> {
+  int _selectedIndex = 0; 
+
+  static const List<Widget> _screens = <Widget>[
+    TaskListScreen(),
+    FileManagerScreen(),
+  ];
+
+  void _onItemTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +43,27 @@ class TaskifyApp extends StatelessWidget {
       title: 'Taskify - Менеджер задач',
       theme: AppTheme.lightTheme,
       debugShowCheckedModeBanner: false,
-      home: const TaskListScreen(),
+      home: Scaffold(
+        body: IndexedStack( 
+          index: _selectedIndex,
+          children: _screens,
+        ),
+        bottomNavigationBar: BottomNavigationBar(
+          items: const <BottomNavigationBarItem>[
+            BottomNavigationBarItem(
+              icon: Icon(Icons.check_box),
+              label: 'Задачи', 
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.folder),
+              label: 'Файлы', 
+            ),
+          ],
+          currentIndex: _selectedIndex,
+          selectedItemColor: Theme.of(context).colorScheme.primary,
+          onTap: _onItemTapped,
+        ),
+      ),
     );
   }
 }
