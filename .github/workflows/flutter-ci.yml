@@ -39,7 +39,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           mkdir -p releases
-          cp build/app/outputs/flutter-apk/app-release.apk releases/
+          cp build/app/outputs/flutter-apk/app-release.apk releases/taskify-${{ github.ref_name }}.apk
 
   build-ios:
     needs: analyze
@@ -67,7 +67,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           mkdir -p releases
-          cp build/ios/iphoneos/app.ipa releases/
+          cp build/ios/iphoneos/app.ipa releases/taskify-${{ github.ref_name }}.ipa
 
   build-windows:
     needs: analyze
@@ -90,7 +90,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           mkdir releases
-          Compress-Archive -Path "build/windows/x64/runner/Release/*" -DestinationPath "releases/windows-release.zip"
+          Compress-Archive -Path "build/windows/x64/runner/Release/*" -DestinationPath "releases/taskify-${{ github.ref_name }}-windows.zip"
 
   build-linux:
     needs: analyze
@@ -118,7 +118,7 @@ jobs:
         run: |
           mkdir -p releases
           cd build/linux/x64/release/bundle
-          tar czf ../../../../../releases/linux-release.tar.gz *
+          tar czf ../../../../../releases/taskify-${{ github.ref_name }}-linux.tar.gz *
 
   build-macos:
     needs: analyze
@@ -142,7 +142,7 @@ jobs:
         run: |
           mkdir -p releases
           cd build/macos/Build/Products/Release
-          zip -r ../../../../../releases/macos-release.zip ./*
+          zip -r ../../../../../releases/taskify-${{ github.ref_name }}-macos.zip ./*
 
   create-release:
     needs: [build-android, build-ios, build-windows, build-linux, build-macos]
@@ -162,15 +162,30 @@ jobs:
         run: ls -R releases/
       - name: Create Release
         uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: |
-            releases/android-apk/app-release.apk
-            releases/windows-build/windows-release.zip
-            releases/linux-build/linux-release.tar.gz
-            releases/macos-build/macos-release.zip
-            releases/ios-ipa/app.ipa
-          name: Release ${{ github.ref_name }}
+            releases/taskify-${{ github.ref_name }}.apk
+            releases/taskify-${{ github.ref_name }}-windows.zip
+            releases/taskify-${{ github.ref_name }}-linux.tar.gz
+            releases/taskify-${{ github.ref_name }}-macos.zip
+            releases/taskify-${{ github.ref_name }}.ipa
+          name: Taskify ${{ github.ref_name }}
+          body: |
+            ## Taskify Release ${{ github.ref_name }}
+            
+            ### Downloads
+            - Android: taskify-${{ github.ref_name }}.apk
+            - iOS: taskify-${{ github.ref_name }}.ipa
+            - Windows: taskify-${{ github.ref_name }}-windows.zip
+            - Linux: taskify-${{ github.ref_name }}-linux.tar.gz
+            - macOS: taskify-${{ github.ref_name }}-macos.zip
+            
+            ### Build Information
+            - Build Date: ${{ github.event.head_commit.timestamp }}
+            - Commit: ${{ github.sha }}
+            
           draft: false
           prerelease: false
           generate_release_notes: true
-          token: ${{ secrets.GITHUB_TOKEN }}
