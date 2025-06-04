@@ -12,7 +12,7 @@ jobs:
     name: Analyze
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.32.1'  
@@ -24,13 +24,14 @@ jobs:
     needs: analyze
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.32.1'
       - run: flutter pub get
       - run: flutter build apk --release
-      - uses: actions/upload-artifact@v3
+      - name: Upload Android Build
+        uses: actions/upload-artifact@v4
         with:
           name: android-apk
           path: build/app/outputs/flutter-apk/app-release.apk
@@ -44,13 +45,14 @@ jobs:
     needs: analyze
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.32.1'
       - run: flutter pub get
       - run: flutter build ipa --release --no-codesign  
-      - uses: actions/upload-artifact@v3
+      - name: Upload iOS Build
+        uses: actions/upload-artifact@v4
         with:
           name: ios-ipa
           path: build/ios/ipa
@@ -64,7 +66,7 @@ jobs:
     needs: analyze
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.32.1'
@@ -72,7 +74,8 @@ jobs:
       - run: flutter create --platforms=windows . || true
       - run: flutter pub get
       - run: flutter build windows --release
-      - uses: actions/upload-artifact@v3
+      - name: Upload Windows Build
+        uses: actions/upload-artifact@v4
         with:
           name: windows-build
           path: build/windows/runner/Release
@@ -86,7 +89,7 @@ jobs:
     needs: analyze
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
@@ -98,7 +101,8 @@ jobs:
       - run: flutter create --platforms=linux . || true
       - run: flutter pub get
       - run: flutter build linux --release
-      - uses: actions/upload-artifact@v3
+      - name: Upload Linux Build
+        uses: actions/upload-artifact@v4
         with:
           name: linux-build
           path: build/linux/x64/release/bundle
@@ -109,33 +113,17 @@ jobs:
           cd build/linux/x64/release/bundle
           tar czf ../../../../../releases/linux-release.tar.gz *
 
-  build-web:
-    needs: analyze
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.32.1'
-      - run: flutter pub get
-      - run: flutter build web --release
-      - uses: actions/upload-artifact@v3
-        with:
-          name: web-build
-          path: build/web
-
   create-release:
     needs: [build-android, build-ios, build-windows, build-linux]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v3
-      
-      - name: Download all artifacts
-        uses: actions/download-artifact@v3
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
         with:
           path: artifacts
-
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
