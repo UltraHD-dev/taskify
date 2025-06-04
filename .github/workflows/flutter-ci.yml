@@ -71,11 +71,14 @@ jobs:
       - run: flutter create --platforms=windows . || true
       - run: flutter pub get
       - run: flutter build windows --release
+      - name: Create Windows ZIP
+        run: |
+          Compress-Archive -Path "build/windows/x64/runner/Release/*" -DestinationPath "windows-release.zip"
       - name: Upload Windows Build
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: build/windows/x64/runner/Release
+          path: windows-release.zip
 
   build-linux:
     needs: analyze
@@ -93,11 +96,15 @@ jobs:
       - run: flutter create --platforms=linux . || true
       - run: flutter pub get
       - run: flutter build linux --release
+      - name: Create Linux Archive
+        run: |
+          cd build/linux/x64/release/bundle
+          tar czf ../../../../../linux-release.tar.gz *
       - name: Upload Linux Build
         uses: actions/upload-artifact@v4
         with:
           name: linux-build
-          path: build/linux/x64/release/bundle
+          path: linux-release.tar.gz
 
   build-macos:
     needs: analyze
@@ -111,11 +118,15 @@ jobs:
       - run: flutter create --platforms=macos . || true
       - run: flutter pub get
       - run: flutter build macos --release
+      - name: Create macOS Archive
+        run: |
+          cd build/macos/Build/Products/Release
+          zip -r ../../../../../macos-release.zip ./*
       - name: Upload macOS Build
         uses: actions/upload-artifact@v4
         with:
           name: macos-build
-          path: build/macos/Build/Products/Release
+          path: macos-release.zip
 
   create-release:
     needs: [build-android, build-ios, build-windows, build-linux, build-macos]
@@ -126,50 +137,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      # Создаем директорию для артефактов
-      - name: Create Releases directory
-        run: mkdir -p releases
-
-      # Скачиваем все артефакты из предыдущих jobs
-      - uses: actions/download-artifact@v4
+      # Скачиваем все артефакты
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
         with:
-          merge-multiple: true
-          path: downloaded
+          path: artifacts
 
       # Подготавливаем файлы для релиза
-      - name: Prepare release files
+      - name: Prepare Release Files
         run: |
           mkdir -p release_files
-          if [ -f "downloaded/android-apk/app-release.apk" ]; then
-            cp downloaded/android-apk/app-release.apk release_files/taskify-${{ github.ref_name }}.apk
-          else
-            echo "Android APK not found!"
-            exit 1
-          fi
-          if [ -f "downloaded/ios-ipa/app.ipa" ]; then
-            cp downloaded/ios-ipa/app.ipa release_files/taskify-${{ github.ref_name }}.ipa
-          else
-            echo "iOS IPA not found!"
-            exit 1
-          fi
-          if [ -f "downloaded/windows-build/windows-release.zip" ]; then
-            cp downloaded/windows-build/windows-release.zip release_files/taskify-${{ github.ref_name }}-windows.zip
-          else
-            echo "Windows build not found!"
-            exit 1
-          fi
-          if [ -f "downloaded/linux-build/linux-release.tar.gz" ]; then
-            cp downloaded/linux-build/linux-release.tar.gz release_files/taskify-${{ github.ref_name }}-linux.tar.gz
-          else
-            echo "Linux build not found!"
-            exit 1
-          fi
-          if [ -f "downloaded/macos-build/macos-release.zip" ]; then
-            cp downloaded/macos-build/macos-release.zip release_files/taskify-${{ github.ref_name }}-macos.zip
-          else
-            echo "macOS build not found!"
-            exit 1
-          fi
+          cp artifacts/android-apk/app-release.apk release_files/taskify-${{ github.ref_name }}.apk
+          cp artifacts/ios-ipa/app.ipa release_files/taskify-${{ github.ref_name }}.ipa
+          cp artifacts/windows-build/windows-release.zip release_files/taskify-${{ github.ref_name }}-windows.zip
+          cp artifacts/linux-build/linux-release.tar.gz release_files/taskify-${{ github.ref_name }}-linux.tar.gz
+          cp artifacts/macos-build/macos-release.zip release_files/taskify-${{ github.ref_name }}-macos.zip
           ls -la release_files/
 
       # Создаем релиз
@@ -178,12 +160,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          files: |
-            release_files/taskify-${{ github.ref_name }}.apk
-            release_files/taskify-${{ github.ref_name }}.ipa
-            release_files/taskify-${{ github.ref_name }}-windows.zip
-            release_files/taskify-${{ github.ref_name }}-linux.tar.gz
-            release_files/taskify-${{ github.ref_name }}-macos.zip
+          files: release_files/*
           name: Taskify ${{ github.ref_name }}
           body: |
             ## Taskify Release ${{ github.ref_name }}
@@ -200,4 +177,3 @@ jobs:
             - Commit: ${{ github.sha }}
           draft: false
           prerelease: false
-          generate_release_notes: true
