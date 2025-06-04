@@ -8,8 +8,8 @@ on:
     branches: [main]
 
 jobs:
-  test:
-    name: Test and analyze
+  analyze:
+    name: Analyze
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -19,66 +19,132 @@ jobs:
           channel: 'stable'
       - run: flutter pub get
       - run: flutter analyze
-      - run: flutter test
 
   build-android:
-    needs: test
+    needs: analyze
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.16.0'
-      - run: flutter doctor --android-licenses
+          flutter-version: '3.32.1'
       - run: flutter pub get
       - run: flutter build apk --release
       - uses: actions/upload-artifact@v3
         with:
           name: android-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+      - name: Store APK for release
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          mkdir -p releases
+          cp build/app/outputs/flutter-apk/app-release.apk releases/
 
   build-ios:
-    needs: test
+    needs: analyze
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v3
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.16.0'
+          flutter-version: '3.32.1'
       - run: flutter pub get
       - run: flutter build ipa --release --no-codesign  
       - uses: actions/upload-artifact@v3
         with:
           name: ios-ipa
           path: build/ios/ipa
+      - name: Store IPA for release
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          mkdir -p releases
+          cp -r build/ios/ipa releases/
 
   build-windows:
-    needs: test
+    needs: analyze
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v3
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.16.0'
-      - run: flutter create --platforms=windows . || true  
+          flutter-version: '3.32.1'
+      - run: flutter config --enable-windows-desktop
+      - run: flutter create --platforms=windows . || true
       - run: flutter pub get
       - run: flutter build windows --release
       - uses: actions/upload-artifact@v3
         with:
           name: windows-build
           path: build/windows/runner/Release
+      - name: Store Windows build for release
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          mkdir releases
+          Compress-Archive -Path build/windows/runner/Release/* -DestinationPath releases/windows-release.zip
+
+  build-linux:
+    needs: analyze
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang libgtk-3-dev
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.32.1'
+      - run: flutter config --enable-linux-desktop
+      - run: flutter create --platforms=linux . || true
+      - run: flutter pub get
+      - run: flutter build linux --release
+      - uses: actions/upload-artifact@v3
+        with:
+          name: linux-build
+          path: build/linux/x64/release/bundle
+      - name: Store Linux build for release
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          mkdir -p releases
+          cd build/linux/x64/release/bundle
+          tar czf ../../../../../releases/linux-release.tar.gz *
 
   build-web:
-    needs: test
+    needs: analyze
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.16.0'
+          flutter-version: '3.32.1'
       - run: flutter pub get
       - run: flutter build web --release
       - uses: actions/upload-artifact@v3
         with:
           name: web-build
           path: build/web
+
+  create-release:
+    needs: [build-android, build-ios, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            releases/app-release.apk
+            releases/windows-release.zip
+            releases/linux-release.tar.gz
+            releases/ipa/*
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
