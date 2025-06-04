@@ -152,40 +152,54 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      
+      # Создаем директорию для артефактов
       - name: Create Releases directory
         run: mkdir -p releases
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+
+      # Скачиваем все артефакты из предыдущих jobs
+      - uses: actions/download-artifact@v4
         with:
-          path: releases
-      - name: Debug directory content
-        run: ls -R releases/
+          merge-multiple: true
+          path: downloaded
+
+      # Подготавливаем файлы для релиза
+      - name: Prepare release files
+        run: |
+          mkdir -p release_files
+          cp downloaded/android-apk/app-release.apk release_files/taskify-${{ github.ref_name }}.apk
+          cp downloaded/ios-ipa/app.ipa release_files/taskify-${{ github.ref_name }}.ipa
+          cp downloaded/windows-build/windows-release.zip release_files/taskify-${{ github.ref_name }}-windows.zip
+          cp downloaded/linux-build/linux-release.tar.gz release_files/taskify-${{ github.ref_name }}-linux.tar.gz
+          cp downloaded/macos-build/macos-release.zip release_files/taskify-${{ github.ref_name }}-macos.zip
+          ls -la release_files/
+
+      # Создаем релиз
       - name: Create Release
         uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: |
-            releases/taskify-${{ github.ref_name }}.apk
-            releases/taskify-${{ github.ref_name }}-windows.zip
-            releases/taskify-${{ github.ref_name }}-linux.tar.gz
-            releases/taskify-${{ github.ref_name }}-macos.zip
-            releases/taskify-${{ github.ref_name }}.ipa
+            release_files/taskify-${{ github.ref_name }}.apk
+            release_files/taskify-${{ github.ref_name }}.ipa
+            release_files/taskify-${{ github.ref_name }}-windows.zip
+            release_files/taskify-${{ github.ref_name }}-linux.tar.gz
+            release_files/taskify-${{ github.ref_name }}-macos.zip
           name: Taskify ${{ github.ref_name }}
           body: |
             ## Taskify Release ${{ github.ref_name }}
             
             ### Downloads
-            - Android: taskify-${{ github.ref_name }}.apk
-            - iOS: taskify-${{ github.ref_name }}.ipa
-            - Windows: taskify-${{ github.ref_name }}-windows.zip
-            - Linux: taskify-${{ github.ref_name }}-linux.tar.gz
-            - macOS: taskify-${{ github.ref_name }}-macos.zip
+            - [Android] taskify-${{ github.ref_name }}.apk
+            - [iOS] taskify-${{ github.ref_name }}.ipa
+            - [Windows] taskify-${{ github.ref_name }}-windows.zip
+            - [Linux] taskify-${{ github.ref_name }}-linux.tar.gz
+            - [macOS] taskify-${{ github.ref_name }}-macos.zip
             
             ### Build Information
             - Build Date: ${{ github.event.head_commit.timestamp }}
             - Commit: ${{ github.sha }}
-            
           draft: false
           prerelease: false
           generate_release_notes: true
