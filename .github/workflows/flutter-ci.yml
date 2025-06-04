@@ -35,11 +35,6 @@ jobs:
         with:
           name: android-apk
           path: build/app/outputs/flutter-apk/app-release.apk
-      - name: Store APK for release
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          mkdir -p releases
-          cp build/app/outputs/flutter-apk/app-release.apk releases/taskify-${{ github.ref_name }}.apk
 
   build-ios:
     needs: analyze
@@ -63,11 +58,6 @@ jobs:
         with:
           name: ios-ipa
           path: build/ios/iphoneos/app.ipa
-      - name: Store IPA for release
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          mkdir -p releases
-          cp build/ios/iphoneos/app.ipa releases/taskify-${{ github.ref_name }}.ipa
 
   build-windows:
     needs: analyze
@@ -86,11 +76,6 @@ jobs:
         with:
           name: windows-build
           path: build/windows/x64/runner/Release
-      - name: Store Windows build for release
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          mkdir releases
-          Compress-Archive -Path "build/windows/x64/runner/Release/*" -DestinationPath "releases/taskify-${{ github.ref_name }}-windows.zip"
 
   build-linux:
     needs: analyze
@@ -113,12 +98,6 @@ jobs:
         with:
           name: linux-build
           path: build/linux/x64/release/bundle
-      - name: Store Linux build for release
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          mkdir -p releases
-          cd build/linux/x64/release/bundle
-          tar czf ../../../../../releases/taskify-${{ github.ref_name }}-linux.tar.gz *
 
   build-macos:
     needs: analyze
@@ -137,12 +116,6 @@ jobs:
         with:
           name: macos-build
           path: build/macos/Build/Products/Release
-      - name: Store macOS build for release
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          mkdir -p releases
-          cd build/macos/Build/Products/Release
-          zip -r ../../../../../releases/taskify-${{ github.ref_name }}-macos.zip ./*
 
   create-release:
     needs: [build-android, build-ios, build-windows, build-linux, build-macos]
@@ -167,11 +140,36 @@ jobs:
       - name: Prepare release files
         run: |
           mkdir -p release_files
-          cp downloaded/android-apk/app-release.apk release_files/taskify-${{ github.ref_name }}.apk
-          cp downloaded/ios-ipa/app.ipa release_files/taskify-${{ github.ref_name }}.ipa
-          cp downloaded/windows-build/windows-release.zip release_files/taskify-${{ github.ref_name }}-windows.zip
-          cp downloaded/linux-build/linux-release.tar.gz release_files/taskify-${{ github.ref_name }}-linux.tar.gz
-          cp downloaded/macos-build/macos-release.zip release_files/taskify-${{ github.ref_name }}-macos.zip
+          if [ -f "downloaded/android-apk/app-release.apk" ]; then
+            cp downloaded/android-apk/app-release.apk release_files/taskify-${{ github.ref_name }}.apk
+          else
+            echo "Android APK not found!"
+            exit 1
+          fi
+          if [ -f "downloaded/ios-ipa/app.ipa" ]; then
+            cp downloaded/ios-ipa/app.ipa release_files/taskify-${{ github.ref_name }}.ipa
+          else
+            echo "iOS IPA not found!"
+            exit 1
+          fi
+          if [ -f "downloaded/windows-build/windows-release.zip" ]; then
+            cp downloaded/windows-build/windows-release.zip release_files/taskify-${{ github.ref_name }}-windows.zip
+          else
+            echo "Windows build not found!"
+            exit 1
+          fi
+          if [ -f "downloaded/linux-build/linux-release.tar.gz" ]; then
+            cp downloaded/linux-build/linux-release.tar.gz release_files/taskify-${{ github.ref_name }}-linux.tar.gz
+          else
+            echo "Linux build not found!"
+            exit 1
+          fi
+          if [ -f "downloaded/macos-build/macos-release.zip" ]; then
+            cp downloaded/macos-build/macos-release.zip release_files/taskify-${{ github.ref_name }}-macos.zip
+          else
+            echo "macOS build not found!"
+            exit 1
+          fi
           ls -la release_files/
 
       # Создаем релиз
