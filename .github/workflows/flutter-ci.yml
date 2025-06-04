@@ -1,4 +1,4 @@
-name: Flutter CI/CD
+name: Taskify CI/CD
 
 on:
   push:
@@ -49,18 +49,25 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.32.1'
+      - run: flutter create --platforms=ios . || true
       - run: flutter pub get
-      - run: flutter build ipa --release --no-codesign  
+      - run: flutter build ios --release --no-codesign
+      - name: Create IPA
+        run: |
+          cd build/ios/iphoneos
+          mkdir Payload
+          cp -r Runner.app Payload
+          zip -r app.ipa Payload
       - name: Upload iOS Build
         uses: actions/upload-artifact@v4
         with:
           name: ios-ipa
-          path: build/ios/ipa
+          path: build/ios/iphoneos/app.ipa
       - name: Store IPA for release
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           mkdir -p releases
-          cp -r build/ios/ipa releases/
+          cp build/ios/iphoneos/app.ipa releases/
 
   build-windows:
     needs: analyze
@@ -78,12 +85,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: build/windows/runner/Release
+          path: build/windows/x64/runner/Release
       - name: Store Windows build for release
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           mkdir releases
-          Compress-Archive -Path build/windows/runner/Release/* -DestinationPath releases/windows-release.zip
+          Compress-Archive -Path "build/windows/x64/runner/Release/*" -DestinationPath "releases/windows-release.zip"
 
   build-linux:
     needs: analyze
@@ -113,26 +120,57 @@ jobs:
           cd build/linux/x64/release/bundle
           tar czf ../../../../../releases/linux-release.tar.gz *
 
+  build-macos:
+    needs: analyze
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.32.1'
+      - run: flutter config --enable-macos-desktop
+      - run: flutter create --platforms=macos . || true
+      - run: flutter pub get
+      - run: flutter build macos --release
+      - name: Upload macOS Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: build/macos/Build/Products/Release
+      - name: Store macOS build for release
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          mkdir -p releases
+          cd build/macos/Build/Products/Release
+          zip -r ../../../../../releases/macos-release.zip ./*
+
   create-release:
-    needs: [build-android, build-ios, build-windows, build-linux]
+    needs: [build-android, build-ios, build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - name: Create Releases directory
+        run: mkdir -p releases
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          path: releases
+      - name: Debug directory content
+        run: ls -R releases/
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            releases/app-release.apk
-            releases/windows-release.zip
-            releases/linux-release.tar.gz
-            releases/ipa/*
+            releases/android-apk/app-release.apk
+            releases/windows-build/windows-release.zip
+            releases/linux-build/linux-release.tar.gz
+            releases/macos-build/macos-release.zip
+            releases/ios-ipa/app.ipa
           name: Release ${{ github.ref_name }}
           draft: false
           prerelease: false
           generate_release_notes: true
+          token: ${{ secrets.GITHUB_TOKEN }}
