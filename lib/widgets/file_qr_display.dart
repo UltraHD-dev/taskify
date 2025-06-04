@@ -69,7 +69,21 @@ class _FileQrDisplayScreenState extends State<FileQrDisplayScreen> {
       final file = await File('${tempDir.path}/qr_code.png').create();
       await file.writeAsBytes(pngBytes);
 
-      await Share.shareXFiles([XFile(file.path)], text: 'Мой QR-код файла!');
+      // Используем новый API SharePlus.instance.share() с ShareParams
+      final params = ShareParams(
+        text: 'Мой QR-код файла!',
+        files: [XFile(file.path)],
+      );
+      
+      final result = await SharePlus.instance.share(params);
+      
+      if (result.status == ShareResultStatus.success) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('QR-код успешно отправлен!')),
+          );
+        }
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

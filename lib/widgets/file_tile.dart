@@ -61,7 +61,8 @@ class FileTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        // Исправлено: используем withValues вместо deprecated withOpacity
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Icon(icon, color: color, size: 30),
@@ -129,8 +130,9 @@ class FileTile extends StatelessWidget {
                     Text(
                       _formatFileSize(file.size),
                       style: textTheme.bodySmall?.copyWith(
+                        // Исправлено: используем withValues вместо deprecated withOpacity
                         color: isSelected
-                            ? colorScheme.onPrimaryContainer.withOpacity(0.7)
+                            ? colorScheme.onPrimaryContainer.withValues(alpha: 0.7)
                             : colorScheme.onSurfaceVariant,
                       ),
                     ),

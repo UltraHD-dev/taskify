@@ -23,6 +23,8 @@ dependencies:
   path_provider: ^2.1.5
   network_info_plus: ^6.1.4
   flutter_launcher_icons: ^0.14.3
+  share_plus: ^11.0.0
+  cross_file: ^0.3.3+4
 
 dev_dependencies:
   flutter_test:
