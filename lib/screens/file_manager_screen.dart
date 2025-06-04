@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:taskify/models/file.dart' as model_file; // Added prefix for local model
+import 'package:taskify/models/file.dart' as model_file;
 import 'package:taskify/service/file_storage.dart';
 import 'package:taskify/screens/file_dialog.dart';
 import 'package:taskify/widgets/file_tile.dart';
-import 'package:file_picker/file_picker.dart' as file_picker_lib; // Added prefix for file_picker
+import 'package:file_picker/file_picker.dart' as file_picker_lib;
+import 'package:taskify/widgets/file_qr_display.dart';
+import 'package:taskify/screens/qr_scaner_screen.dart'; // Добавлен импорт
+import 'package:permission_handler/permission_handler.dart';
 
 class FileManagerScreen extends StatefulWidget {
   const FileManagerScreen({super.key});
@@ -13,10 +16,11 @@ class FileManagerScreen extends StatefulWidget {
 }
 
 class _FileManagerScreenState extends State<FileManagerScreen> {
+  List<model_file.AppFile> allFiles = [];
   List<model_file.AppFile> files = [];
   List<String> categories = [];
   String? selectedCategory;
-  model_file.FileType? selectedFileType; // Use prefixed model_file.FileType
+  model_file.FileType? selectedFileType;
   bool isLoading = false;
   final Set<String> selectedFiles = {};
   bool isSelectionMode = false;
@@ -26,30 +30,26 @@ class _FileManagerScreenState extends State<FileManagerScreen> {
   @override
   void initState() {
     super.initState();
-    _loadFiles();
-    _loadCategories();
-    // Removed: _searchController.addListener(_onSearchChanged);
-    // The TextField's onChanged callback will handle this.
+    _loadFilesAndCategories();
   }
 
   @override
   void dispose() {
-    // Removed: _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadFiles() async {
-    if (!mounted) return;
+  Future<void> _loadFilesAndCategories() async {
     setState(() => isLoading = true);
     try {
       final loadedFiles = await FileStorage.loadFiles();
-      if (mounted) {
-        setState(() {
-          files = loadedFiles;
-          _updateCategoriesFromFiles();
-        });
-      }
+      final loadedCategories = await FileStorage.loadCategories();
+      if (!mounted) return;
+      setState(() {
+        allFiles = loadedFiles;
+        categories = loadedCategories;
+      });
+      _applyFilters();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -57,631 +57,502 @@ class _FileManagerScreenState extends State<FileManagerScreen> {
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => isLoading = false);
-      }
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
-  Future<void> _loadCategories() async {
-    if (!mounted) return;
-    final loadedCategories = await FileStorage.loadFileCategories();
-    if (mounted) {
-      setState(() => categories = loadedCategories);
-    }
-  }
-
-  void _updateCategoriesFromFiles() {
-    final fileCategories = files
-        .map((file) => file.category)
-        .where((category) => category.isNotEmpty)
-        .toSet();
-
-    bool categoriesChanged = false;
-    for (final category in fileCategories) {
-      if (!categories.contains(category)) {
-        categories.add(category);
-        categoriesChanged = true;
-      }
-    }
-
-    if (categoriesChanged && mounted) {
-      categories.sort(); // Keep categories sorted
-      FileStorage.saveFileCategories(categories);
-    }
-  }
-
-  // --- File Picking Logic ---
   Future<void> _pickFiles() async {
-    try {
-      // Use prefixed file_picker_lib.FileType
-      final result = await file_picker_lib.FilePicker.platform.pickFiles(
-        allowMultiple: true,
-        type: file_picker_lib.FileType.any,
-      );
+    final result = await file_picker_lib.FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      type: file_picker_lib.FileType.any,
+    );
 
-      if (result != null && result.files.isNotEmpty) {
-        int addedCount = 0;
-        for (final file in result.files) {
-          if (file.bytes != null && file.name.isNotEmpty) {
-            final parts = file.name.split('.');
-            if (parts.length >= 2) {
-              final name = parts.sublist(0, parts.length - 1).join('.');
-              final extension = parts.last;
-
-              final appFile = model_file.AppFile( // Use prefixed model_file.AppFile
-                name: name,
-                extension: extension,
-                size: file.bytes!.length,
-                data: file.bytes!,
-                mimeType: FileStorage.getMimeType(extension),
-                // Default category can be empty or a general one
-                category: '', 
-              );
-
-              final success = await FileStorage.addFile(appFile);
-              if (success) {
-                addedCount++;
-              } else {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Не удалось добавить файл: ${file.name}')),
-                  );
-                }
-              }
-            }
-          }
-        }
-
-        if (addedCount > 0) {
-          await _loadFiles(); // Reload files to reflect new additions and update categories
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Добавлено файлов: $addedCount')),
-            );
-          }
+    if (result != null && mounted) {
+      setState(() => isLoading = true);
+      final newFiles = <model_file.AppFile>[];
+      for (final platformFile in result.files) {
+        if (platformFile.bytes != null) {
+          final newFile = model_file.AppFile(
+            name: platformFile.name.split('.').first,
+            extension: platformFile.extension ?? '',
+            size: platformFile.size,
+            data: platformFile.bytes!,
+            // Исправлено: убрано обращение к несуществующему свойству mimeType
+            mimeType: _getMimeTypeFromExtension(platformFile.extension ?? ''),
+          );
+          newFiles.add(newFile);
         }
       }
-    } catch (e) {
+
+      for (final file in newFiles) {
+        await FileStorage.saveFile(file);
+      }
+      await _loadFilesAndCategories();
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка добавления файлов: $e')),
+          SnackBar(
+            content: Text('Добавлено ${newFiles.length} файл(ов)'),
+          ),
         );
       }
+      setState(() => isLoading = false);
     }
   }
 
-  // --- Selection Mode Methods ---
-  void _toggleSelectionMode() {
-    setState(() {
-      isSelectionMode = !isSelectionMode;
-      if (!isSelectionMode) {
-        selectedFiles.clear();
-      }
-    });
+  // Добавлен метод для определения MIME типа по расширению
+  String _getMimeTypeFromExtension(String extension) {
+    switch (extension.toLowerCase()) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      case 'pdf':
+        return 'application/pdf';
+      case 'txt':
+        return 'text/plain';
+      case 'doc':
+        return 'application/msword';
+      case 'docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'mp3':
+        return 'audio/mpeg';
+      case 'mp4':
+        return 'video/mp4';
+      case 'zip':
+        return 'application/zip';
+      default:
+        return 'application/octet-stream';
+    }
   }
 
-  void _toggleFileSelection(String fileId) {
+  Future<void> _editFile(model_file.AppFile file) async {
+    final updatedCategories = List<String>.from(categories);
+    final resultFile = await showDialog<model_file.AppFile>(
+      context: context,
+      builder: (context) => FileDialog(
+        file: file,
+        categories: updatedCategories,
+        onCategoriesUpdated: (newCategories) {
+          setState(() {
+            categories = newCategories;
+          });
+          FileStorage.saveCategories(newCategories);
+        },
+        onSave: (editedFile) {
+          Navigator.of(context).pop(editedFile);
+        },
+      ),
+    );
+
+    if (resultFile != null) {
+      setState(() => isLoading = true);
+      await FileStorage.saveFile(resultFile);
+      await _loadFilesAndCategories();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Файл "${resultFile.fullName}" обновлен')),
+        );
+      }
+      setState(() => isLoading = false);
+    }
+  }
+
+  Future<void> _deleteFile(model_file.AppFile file) async {
+    final bool? confirmDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Удалить файл?'),
+        content: Text('Вы уверены, что хотите удалить "${file.fullName}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmDelete == true) {
+      setState(() => isLoading = true);
+      final success = await FileStorage.deleteFile(file.id);
+      if (success) {
+        await _loadFilesAndCategories();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Файл "${file.fullName}" удален')),
+          );
+        }
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка удаления файла "${file.fullName}"')),
+        );
+      }
+      setState(() => isLoading = false);
+    }
+  }
+
+  void _toggleSelection(String fileId) {
     setState(() {
       if (selectedFiles.contains(fileId)) {
         selectedFiles.remove(fileId);
       } else {
         selectedFiles.add(fileId);
       }
+      isSelectionMode = selectedFiles.isNotEmpty;
     });
   }
 
-  void _selectAllFiles() {
+  void _clearSelection() {
     setState(() {
-      final currentFilteredFiles = filteredFiles; // Cache for consistentcy
-      if (selectedFiles.length == currentFilteredFiles.length && currentFilteredFiles.isNotEmpty) {
-        selectedFiles.clear();
-      } else {
-        selectedFiles.clear();
-        for (var file in currentFilteredFiles) {
-          selectedFiles.add(file.id);
-        }
-      }
+      selectedFiles.clear();
+      isSelectionMode = false;
     });
   }
 
-  Future<void> _deleteSelectedFiles() async {
-    if (selectedFiles.isEmpty || !mounted) return;
+  Future<void> _exportSelectedFiles() async {
+    if (selectedFiles.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Выберите файлы для экспорта')),
+      );
+      return;
+    }
 
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Удалить выбранные файлы?'),
-        content: Text(
-            'Вы уверены, что хотите удалить ${selectedFiles.length} файл(ов)?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Удалить'),
-          ),
-        ],
+    final filesToExport =
+        allFiles.where((file) => selectedFiles.contains(file.id)).toList();
+    final jsonData = FileStorage.exportFilesToJson(filesToExport);
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => FileQrDisplayScreen(jsonData: jsonData),
       ),
     );
+  }
 
-    if (confirm == true && mounted) {
-      setState(() => isLoading = true);
-      try {
-        for (final fileId in Set<String>.from(selectedFiles)) { // Iterate over a copy
-          await FileStorage.deleteFile(fileId);
-        }
-        if (mounted) {
-           setState(() {
-            selectedFiles.clear();
-            isSelectionMode = false;
-          });
-          await _loadFiles(); // This will set isLoading to false
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Выбранные файлы удалены')),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Ошибка удаления файлов: $e')),
-          );
-           setState(() => isLoading = false); // Ensure isLoading is reset on error
+  Future<void> _importFilesFromQr() async {
+    final status = await Permission.camera.request();
+    if (status.isGranted) {
+      // Исправлено: проверка mounted перед использованием context
+      if (!mounted) return;
+      
+      final qrData = await Navigator.of(context).push<String>(
+        MaterialPageRoute(builder: (context) => const QRScannerScreen()),
+      );
+
+      if (qrData != null && mounted) {
+        setState(() => isLoading = true);
+        try {
+          final importedFiles = FileStorage.importFilesFromJson(qrData);
+          int importedCount = 0;
+          for (final file in importedFiles) {
+            await FileStorage.saveFile(file);
+            importedCount++;
+          }
+          await _loadFilesAndCategories();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                  content: Text('Импортировано $importedCount файл(ов)')),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Ошибка импорта файлов: $e')),
+            );
+          }
+        } finally {
+          if (mounted) {
+            setState(() => isLoading = false);
+          }
         }
       }
-      // No finally block for isLoading here, _loadFiles or catch handles it
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Разрешение на камеру отклонено.'),
+          ),
+        );
+      }
     }
   }
 
-  // --- Search and Filter Logic ---
-  void _onSearchChanged(String query) {
+  void _applyFilters() {
     setState(() {
-      _searchQuery = query;
+      files = allFiles.where((file) {
+        final matchesSearch = _searchQuery.isEmpty ||
+            file.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+            file.description.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+            file.tags
+                .any((tag) => tag.toLowerCase().contains(_searchQuery.toLowerCase()));
+
+        final matchesCategory = selectedCategory == null ||
+            selectedCategory == '' ||
+            file.category == selectedCategory;
+
+        final matchesFileType = selectedFileType == null ||
+            file.fileType == selectedFileType;
+
+        return matchesSearch && matchesCategory && matchesFileType;
+      }).toList();
     });
   }
 
-  List<model_file.AppFile> get filteredFiles {
-    List<model_file.AppFile> currentFiles = files;
-
-    if (_searchQuery.isNotEmpty) {
-      final query = _searchQuery.toLowerCase();
-      currentFiles = currentFiles.where((file) {
-        return file.name.toLowerCase().contains(query) ||
-            file.extension.toLowerCase().contains(query) ||
-            (file.category.isNotEmpty && file.category.toLowerCase().contains(query));
-      }).toList();
-    }
-
-    if (selectedCategory != null) {
-      currentFiles = currentFiles
-          .where((file) => file.category == selectedCategory)
-          .toList();
-    }
-
-    if (selectedFileType != null) {
-      currentFiles = currentFiles.where((file) {
-        // Ensure selectedFileType is model_file.FileType
-        switch (selectedFileType!) {
-          case model_file.FileType.image:
-            return ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp']
-                .contains(file.extension.toLowerCase());
-          case model_file.FileType.pdf:
-            return file.extension.toLowerCase() == 'pdf';
-          case model_file.FileType.document:
-            return ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp']
-                .contains(file.extension.toLowerCase());
-          case model_file.FileType.text:
-            return ['txt', 'md', 'json', 'xml', 'csv', 'rtf']
-                .contains(file.extension.toLowerCase());
-          case model_file.FileType.audio:
-            return ['mp3', 'wav', 'aac', 'flac', 'ogg', 'm4a']
-                .contains(file.extension.toLowerCase());
-          case model_file.FileType.video:
-            return ['mp4', 'mov', 'avi', 'mkv', 'webm', 'flv']
-                .contains(file.extension.toLowerCase());
-          case model_file.FileType.archive:
-            return ['zip', 'rar', '7z', 'tar', 'gz', 'bz2']
-                .contains(file.extension.toLowerCase());
-          case model_file.FileType.other:
-             // For 'other', we might want to include files that don't fall into other categories
-             // This logic depends on how 'other' is defined.
-             // For now, let's assume it means files not matching any specific type above.
-             // This can be complex to implement perfectly here without more context.
-             // A simple approach: if it's not any of the above, it's 'other'.
-             // However, the filter is usually exclusive.
-            return true; // Or specific logic for 'other'
-        }
-      }).toList();
-    }
-    return currentFiles;
-  }
-
-  // --- Dialogs and other UI actions ---
-  Future<void> _showFileDialog({model_file.AppFile? file}) async {
-    if (!mounted) return;
-    // Pass a copy of categories to avoid direct modification issues if FileDialog tries to change it.
-    // FileDialog should use the onCategoriesUpdated callback to signal changes.
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => FileDialog(
-        file: file,
-        categories: List<String>.from(categories), // Pass a copy
-        onSave: (model_file.AppFile fileData) async {
-          // This callback is triggered by FileDialog before it pops.
-          // The actual saving happens here.
-          // FileDialog will then pop with true, which triggers _loadFiles.
-          if (!mounted) return;
-          try {
-            if (fileData.id.isEmpty) { // Heuristic for new file
-              await FileStorage.addFile(fileData);
-            } else {
-              await FileStorage.updateFile(fileData);
-            }
-            // If a new category was potentially created and assigned within FileDialog,
-            // ensure it's reflected in the main categories list.
-            if (fileData.category.isNotEmpty && !categories.contains(fileData.category)) {
-                 if (mounted) {
-                    setState(() {
-                        categories.add(fileData.category);
-                        categories.sort();
-                    });
-                    await FileStorage.saveFileCategories(categories);
-                 }
-            }
-          } catch (e) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Ошибка сохранения файла: $e')),
-              );
-            }
-            // Optionally rethrow or return a value to indicate failure to FileDialog
-            // so it doesn't pop with 'true'. For now, assume it pops 'true' on attempt.
-          }
-        },
-        onCategoriesUpdated: (List<String> updatedCategories) async {
-          // This callback is triggered by FileDialog if it allows direct category list manipulation
-          // (e.g., adding a new category directly to the list it holds).
-          if (!mounted) return;
-          setState(() {
-            categories = updatedCategories; // Update local state
-            categories.sort();
-          });
-          try {
-            await FileStorage.saveFileCategories(updatedCategories); // Persist
-            // No need to call _loadFiles here if FileDialog will pop(true) on save,
-            // or if category update is part of a save operation.
-            // If categories can be updated independently of a file save, then _loadFiles might be needed.
-            // For simplicity, let's assume a save operation (which pops true) will follow category updates.
-            // If not, _loadFiles() or at least _loadCategories() might be needed here.
-            await _loadCategories(); // Reload categories to be safe.
-            await _loadFiles(); // Reload files as their categories might have changed.
-
-          } catch (e) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Ошибка обновления категорий: $e')),
-              );
-            }
-          }
-        },
-      ),
-    );
-
-    if (result == true && mounted) {
-      await _loadFiles(); // Reload files if FileDialog indicated success (e.g., save occurred)
-    }
-  }
-
-  Future<void> _deleteFile(String fileId) async {
-    if (!mounted) return;
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Удалить файл?'),
-        content: const Text('Вы уверены, что хотите удалить этот файл?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Удалить'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true && mounted) {
-      setState(() => isLoading = true);
-      try {
-        await FileStorage.deleteFile(fileId);
-        if (mounted) {
-          selectedFiles.remove(fileId);
-          await _loadFiles(); // This will set isLoading to false
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Файл удален')),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Ошибка удаления файла: $e')),
-          );
-          setState(() => isLoading = false); // Ensure isLoading is reset on error
-        }
-      }
-    }
-  }
-
-  void _showStatistics() {
-    if (!mounted) return;
-    // Basic statistics. Can be expanded.
-    int totalSize = files.fold(0, (sum, file) => sum + file.size);
-    String totalSizeFormatted = (totalSize / (1024 * 1024)).toStringAsFixed(2); // MB
-
-    Map<String, int> categoryCounts = {};
-    for (var file in files) {
-      categoryCounts[file.category.isEmpty ? "Без категории" : file.category] =
-          (categoryCounts[file.category.isEmpty ? "Без категории" : file.category] ?? 0) + 1;
-    }
-    String categoryStats = categoryCounts.entries.map((e) => "${e.key}: ${e.value}").join('\n');
-
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Статистика файлов'),
-        content: SingleChildScrollView(
-          child: ListBody(
-            children: <Widget>[
-              Text('Всего файлов: ${files.length}'),
-              Text('Общий размер: $totalSizeFormatted MB'),
-              if (isSelectionMode) Text('Выбрано файлов: ${selectedFiles.length}'),
-              const SizedBox(height: 10),
-              const Text('Файлов по категориям:', style: TextStyle(fontWeight: FontWeight.bold)),
-              Text(categoryStats.isEmpty? "Нет файлов с категориями." : categoryStats),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('ОК'),
-          ),
-        ],
-      ),
-    );
+  void _resetFilters() {
+    setState(() {
+      _searchController.clear();
+      _searchQuery = '';
+      selectedCategory = null;
+      selectedFileType = null;
+    });
+    _applyFilters();
   }
 
   @override
   Widget build(BuildContext context) {
-    final currentFilteredFiles = filteredFiles; // Cache for consistent access in build
-
     return Scaffold(
       appBar: AppBar(
-        title: Text(isSelectionMode
-            ? 'Выбрано: ${selectedFiles.length}'
-            : 'Файловый менеджер'),
+        title: isSelectionMode
+            ? Text('${selectedFiles.length} выбрано')
+            : const Text('Менеджер файлов'),
+        leading: isSelectionMode
+            ? IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: _clearSelection,
+              )
+            : null,
         actions: [
-          if (isSelectionMode) ...[
-            if (selectedFiles.isNotEmpty)
-              IconButton(
-                icon: const Icon(Icons.delete_outline),
-                onPressed: _deleteSelectedFiles,
-                tooltip: 'Удалить выбранные',
-              ),
+          if (isSelectionMode)
             IconButton(
-              icon: Icon(selectedFiles.length == currentFilteredFiles.length &&
-                      currentFilteredFiles.isNotEmpty
-                  ? Icons.deselect_outlined
-                  : Icons.select_all_outlined),
-              onPressed: currentFilteredFiles.isNotEmpty ? _selectAllFiles : null,
-              tooltip: selectedFiles.length == currentFilteredFiles.length &&
-                      currentFilteredFiles.isNotEmpty
-                  ? 'Снять выделение'
-                  : 'Выбрать все',
-            ),
+              icon: const Icon(Icons.share),
+              tooltip: 'Поделиться выбранными файлами',
+              onPressed: _exportSelectedFiles,
+            )
+          else
             IconButton(
-              icon: const Icon(Icons.close),
-              onPressed: _toggleSelectionMode,
-              tooltip: 'Отмена',
-            ),
-          ] else ...[
-            IconButton(
-              icon: const Icon(Icons.bar_chart_outlined),
-              onPressed: _showStatistics,
-              tooltip: 'Статистика',
-            ),
-            PopupMenuButton<String>(
               icon: const Icon(Icons.filter_list),
-              tooltip: "Фильтр",
-              onSelected: (value) {
-                setState(() {
-                  if (value == 'all_categories') {
-                    selectedCategory = null;
-                  } else if (value.startsWith('category_')) {
-                    selectedCategory = value.substring(9);
-                  } else if (value == 'all_types') {
-                    selectedFileType = null;
-                  } else {
-                    // Convert string back to model_file.FileType enum
-                    selectedFileType = model_file.FileType.values.firstWhere(
-                      (type) => type.toString() == value,
-                      // orElse: () => model_file.FileType.other, // Or null if no match
-                    );
-                  }
-                });
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'all_categories',
-                  child: Text('Все категории'),
-                ),
-                ...categories.map((category) => PopupMenuItem(
-                      value: 'category_$category',
-                      child: Text(category.isEmpty ? "Без категории" : category),
-                    )),
-                if (categories.isNotEmpty) const PopupMenuDivider(),
-                const PopupMenuItem(
-                  value: 'all_types',
-                  child: Text('Все типы'),
-                ),
-                // Use model_file.FileType for menu items
-                ...model_file.FileType.values.map((type) => PopupMenuItem(
-                      value: type.toString(), // Store enum as string
-                      child: Text(_getFileTypeDisplayName(type)),
-                    )),
-              ],
+              tooltip: 'Фильтры',
+              onPressed: () => _showFilterBottomSheet(context),
             ),
-          ],
         ],
       ),
       body: Column(
         children: [
-          if (!isSelectionMode)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: 'Поиск файлов...',
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: _searchQuery.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear),
-                          onPressed: () {
-                            _searchController.clear();
-                            _onSearchChanged(''); // Explicitly call to update UI
-                          },
-                        )
-                      : null,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Поиск файлов...',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
                 ),
-                onChanged: _onSearchChanged, // Use onChanged directly
+                filled: true,
+                fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() {
+                            _searchQuery = '';
+                          });
+                          _applyFilters();
+                        },
+                      )
+                    : null,
               ),
+              onChanged: (query) {
+                setState(() {
+                  _searchQuery = query;
+                });
+                _applyFilters();
+              },
             ),
-
-          if (selectedCategory != null || selectedFileType != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  if (selectedCategory != null)
-                    Chip(
-                      label: Text('Категория: ${selectedCategory!.isEmpty ? "Без категории" : selectedCategory}'),
-                      onDeleted: () => setState(() => selectedCategory = null),
-                    ),
-                  if (selectedFileType != null)
-                    Chip(
-                      label: Text(
-                          'Тип: ${_getFileTypeDisplayName(selectedFileType!)}'),
-                      onDeleted: () => setState(() => selectedFileType = null),
-                    ),
-                ],
-              ),
-            ),
-          
+          ),
           Expanded(
             child: isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : currentFilteredFiles.isEmpty
-                    ? _buildEmptyState(files.isEmpty) // Pass if original files list is empty
-                    : ListView.separated(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: currentFilteredFiles.length,
-                        separatorBuilder: (context, index) =>
-                            const SizedBox(height: 8),
+                : files.isEmpty
+                    ? _buildNoResultsWidget(context)
+                    : ListView.builder(
+                        itemCount: files.length,
                         itemBuilder: (context, index) {
-                          final file = currentFilteredFiles[index];
+                          final file = files[index];
+                          final isSelected = selectedFiles.contains(file.id);
                           return FileTile(
                             file: file,
-                            isSelected: selectedFiles.contains(file.id),
+                            isSelected: isSelected,
                             isSelectionMode: isSelectionMode,
                             onTap: () {
                               if (isSelectionMode) {
-                                _toggleFileSelection(file.id);
+                                _toggleSelection(file.id);
                               } else {
-                                _showFileDialog(file: file);
+                                _editFile(file);
                               }
                             },
-                            onLongPress: () { // Added for convenience
-                                if (!isSelectionMode) {
-                                  _toggleSelectionMode();
-                                  _toggleFileSelection(file.id);
-                                }
+                            onLongPress: () {
+                              setState(() {
+                                isSelectionMode = true;
+                                _toggleSelection(file.id);
+                              });
                             },
-                            onEdit: () => _showFileDialog(file: file), // Only if not in selection mode?
-                            onDelete: () => _deleteFile(file.id), // Only if not in selection mode?
-                            // onSelect is effectively onTap in selection mode or onLongPress
+                            onEdit: () => _editFile(file),
+                            onDelete: () async {
+                              await _deleteFile(file);
+                            },
                           );
                         },
                       ),
           ),
         ],
       ),
-      floatingActionButton: isSelectionMode
-          ? null
-          : FloatingActionButton( // Changed to regular FloatingActionButton
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          if (!isSelectionMode)
+            FloatingActionButton(
+              heroTag: 'addFileButton',
               onPressed: _pickFiles,
-              tooltip: 'Добавить файлы',
-              child: const Icon(Icons.add), // Only icon
+              tooltip: 'Добавить файл',
+              child: const Icon(Icons.add),
             ),
+          const SizedBox(height: 16),
+          if (!isSelectionMode)
+            FloatingActionButton(
+              heroTag: 'importQrButton',
+              onPressed: _importFilesFromQr,
+              tooltip: 'Импортировать по QR',
+              child: const Icon(Icons.qr_code_scanner),
+            ),
+        ],
+      ),
     );
   }
 
-  Widget _buildEmptyState(bool noFilesAtAll) {
+  void _showFilterBottomSheet(BuildContext context) {
+    String? tempSelectedCategory = selectedCategory;
+    model_file.FileType? tempSelectedFileType = selectedFileType;
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter modalSetState) {
+            return Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Фильтры',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: tempSelectedCategory,
+                    decoration: const InputDecoration(
+                      labelText: 'Категория',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      const DropdownMenuItem(
+                        value: null,
+                        child: Text('Все категории'),
+                      ),
+                      ...categories.map((category) => DropdownMenuItem(
+                            value: category,
+                            child: Text(category),
+                          )),
+                    ],
+                    onChanged: (value) {
+                      modalSetState(() {
+                        tempSelectedCategory = value;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<model_file.FileType>(
+                    value: tempSelectedFileType,
+                    decoration: const InputDecoration(
+                      labelText: 'Тип файла',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      const DropdownMenuItem(
+                        value: null,
+                        child: Text('Все типы'),
+                      ),
+                      ...model_file.FileType.values.map((type) => DropdownMenuItem(
+                            value: type,
+                            child: Text(_getFileTypeDisplayName(type)),
+                          )),
+                    ],
+                    onChanged: (value) {
+                      modalSetState(() {
+                        tempSelectedFileType = value;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            modalSetState(() {
+                              tempSelectedCategory = null;
+                              tempSelectedFileType = null;
+                            });
+                            setState(() {
+                              selectedCategory = null;
+                              selectedFileType = null;
+                            });
+                            _resetFilters();
+                            Navigator.pop(context);
+                          },
+                          child: const Text('Сбросить'),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            setState(() {
+                              selectedCategory = tempSelectedCategory;
+                              selectedFileType = tempSelectedFileType;
+                            });
+                            _applyFilters();
+                            Navigator.pop(context);
+                          },
+                          child: const Text('Применить'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildNoResultsWidget(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
-    if (noFilesAtAll) { // No files in the storage at all
-       return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: colorScheme.primaryContainer.withOpacity(0.5),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.folder_off_outlined,
-                  size: 64,
-                  color: colorScheme.primary,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Папка пуста',
-                style: textTheme.headlineSmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Нажмите кнопку "Добавить", чтобы загрузить свой первый файл.',
-                style: textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant.withOpacity(0.7),
-                    ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    // Files exist, but current filter/search yields no results
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32.0),
@@ -691,7 +562,8 @@ class _FileManagerScreenState extends State<FileManagerScreen> {
             Icon(
               Icons.search_off,
               size: 64,
-              color: colorScheme.primary.withOpacity(0.7),
+              // Исправлено: заменен withOpacity на withValues
+              color: colorScheme.primary.withValues(alpha: 0.7),
             ),
             const SizedBox(height: 24),
             Text(
@@ -705,7 +577,8 @@ class _FileManagerScreenState extends State<FileManagerScreen> {
             Text(
               'Попробуйте изменить критерии поиска или сбросить фильтры.',
               style: textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant.withOpacity(0.7),
+                    // Исправлено: заменен withOpacity на withValues
+                    color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
                   ),
               textAlign: TextAlign.center,
             ),
@@ -715,7 +588,6 @@ class _FileManagerScreenState extends State<FileManagerScreen> {
     );
   }
 
-  // Use model_file.FileType here
   String _getFileTypeDisplayName(model_file.FileType type) {
     switch (type) {
       case model_file.FileType.image:
@@ -734,7 +606,6 @@ class _FileManagerScreenState extends State<FileManagerScreen> {
         return 'Архивы';
       case model_file.FileType.other:
         return 'Другие';
-      // No default needed if all enum values are covered
     }
   }
 }

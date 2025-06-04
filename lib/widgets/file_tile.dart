@@ -6,7 +6,7 @@ class FileTile extends StatelessWidget {
   final bool isSelected;
   final bool isSelectionMode;
   final VoidCallback onTap;
-  final VoidCallback? onLongPress; // Added onLongPress
+  final VoidCallback? onLongPress;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -16,10 +16,66 @@ class FileTile extends StatelessWidget {
     this.isSelected = false,
     this.isSelectionMode = false,
     required this.onTap,
-    this.onLongPress, // Added to constructor
+    this.onLongPress,
     required this.onEdit,
     required this.onDelete,
   });
+
+  Widget _buildFileTypeIcon(FileType type, BuildContext context) {
+    IconData icon;
+    Color color = Theme.of(context).colorScheme.primary;
+    switch (type) {
+      case FileType.image:
+        icon = Icons.image;
+        color = Colors.blueAccent;
+        break;
+      case FileType.pdf:
+        icon = Icons.picture_as_pdf;
+        color = Colors.redAccent;
+        break;
+      case FileType.document:
+        icon = Icons.article;
+        color = Colors.deepPurpleAccent;
+        break;
+      case FileType.text:
+        icon = Icons.text_snippet;
+        color = Colors.grey;
+        break;
+      case FileType.audio:
+        icon = Icons.audio_file;
+        color = Colors.green;
+        break;
+      case FileType.video:
+        icon = Icons.video_file;
+        color = Colors.orange;
+        break;
+      case FileType.archive:
+        icon = Icons.archive;
+        color = Colors.brown;
+        break;
+      default:
+        icon = Icons.insert_drive_file;
+        color = Colors.grey;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Icon(icon, color: color, size: 30),
+    );
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,27 +93,24 @@ class FileTile extends StatelessWidget {
       color: isSelected ? colorScheme.primaryContainer : colorScheme.surface,
       child: InkWell(
         onTap: onTap,
-        onLongPress: onLongPress, // Use the new onLongPress
+        onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Row(
             children: [
-              // Selection indicator
               if (isSelectionMode)
                 Padding(
-                  padding: const EdgeInsets.only(right: 12.0),
+                  padding: const EdgeInsets.only(right: 16.0),
                   child: Icon(
-                    isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
-                    color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                    isSelected ? Icons.check_circle : Icons.circle_outlined,
+                    color: isSelected
+                        ? colorScheme.primary
+                        : colorScheme.onSurfaceVariant,
                   ),
                 ),
-              
-              // File Type Icon
               _buildFileTypeIcon(file.fileType, context),
               const SizedBox(width: 16),
-
-              // File Name and Info
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -65,8 +118,9 @@ class FileTile extends StatelessWidget {
                     Text(
                       file.fullName,
                       style: textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: isSelected ? colorScheme.onPrimaryContainer : colorScheme.onSurface,
+                        color: isSelected
+                            ? colorScheme.onPrimaryContainer
+                            : colorScheme.onSurface,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -76,109 +130,82 @@ class FileTile extends StatelessWidget {
                       _formatFileSize(file.size),
                       style: textTheme.bodySmall?.copyWith(
                         color: isSelected
-                            ? colorScheme.onPrimaryContainer.withValues(alpha: 0.7) // Changed to double
+                            ? colorScheme.onPrimaryContainer.withOpacity(0.7)
                             : colorScheme.onSurfaceVariant,
                       ),
                     ),
-                    if (file.category.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? colorScheme.primary.withValues(alpha: 0.7) // Changed to double
-                              : colorScheme.secondaryContainer,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                    if (file.category.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4.0),
                         child: Text(
                           file.category,
-                          style: textTheme.labelSmall?.copyWith(
+                          style: textTheme.bodySmall?.copyWith(
                             color: isSelected
-                                ? colorScheme.onPrimary
-                                : colorScheme.onSecondaryContainer,
+                                ? colorScheme.onPrimaryContainer
+                                : colorScheme.secondary,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
-                    ],
+                    if (file.tags.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4.0),
+                        child: Text(
+                          file.tags.join(', '),
+                          style: textTheme.bodySmall?.copyWith(
+                            color: isSelected
+                                ? colorScheme.onPrimaryContainer
+                                : colorScheme.onSurfaceVariant,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                   ],
                 ),
               ),
-
-              // Action buttons (only if not in selection mode)
-              if (!isSelectionMode) ...[
-                IconButton(
-                  icon: const Icon(Icons.edit),
-                  color: colorScheme.onSurfaceVariant,
-                  onPressed: onEdit,
-                  tooltip: 'Редактировать',
+              if (!isSelectionMode)
+                PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'edit') {
+                      onEdit();
+                    } else if (value == 'delete') {
+                      onDelete();
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit),
+                          SizedBox(width: 8),
+                          Text('Редактировать'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete, color: Colors.red),
+                          SizedBox(width: 8),
+                          Text('Удалить', style: TextStyle(color: Colors.red)),
+                        ],
+                      ),
+                    ),
+                  ],
+                  icon: Icon(
+                    Icons.more_vert,
+                    color: isSelected
+                        ? colorScheme.onPrimaryContainer
+                        : colorScheme.onSurfaceVariant,
+                  ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  color: colorScheme.error,
-                  onPressed: onDelete,
-                  tooltip: 'Удалить',
-                ),
-              ],
             ],
           ),
         ),
       ),
     );
-  }
-
-  Widget _buildFileTypeIcon(FileType type, BuildContext context) {
-    IconData iconData;
-    Color iconColor;
-
-    switch (type) {
-      case FileType.image:
-        iconData = Icons.image;
-        iconColor = Colors.green;
-        break;
-      case FileType.pdf:
-        iconData = Icons.picture_as_pdf;
-        iconColor = Colors.red;
-        break;
-      case FileType.document:
-        iconData = Icons.description;
-        iconColor = Colors.blue;
-        break;
-      case FileType.text:
-        iconData = Icons.text_snippet;
-        iconColor = Colors.grey;
-        break;
-      case FileType.audio:
-        iconData = Icons.audio_file;
-        iconColor = Colors.purple;
-        break;
-      case FileType.video:
-        iconData = Icons.video_file;
-        iconColor = Colors.orange;
-        break;
-      case FileType.archive:
-        iconData = Icons.archive;
-        iconColor = Colors.brown;
-        break;
-      default:
-        iconData = Icons.insert_drive_file;
-        iconColor = Colors.grey;
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: iconColor.withValues(alpha: 0.15), // Changed to double
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Icon(iconData, color: iconColor, size: 30),
-    );
-  }
-
-  String _formatFileSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 }

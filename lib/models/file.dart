@@ -1,4 +1,3 @@
-// lib/models/file.dart
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:taskify/service/file_storage.dart';
@@ -39,9 +38,9 @@ class AppFile {
     this.tags = const [],
     DateTime? createdAt,
     DateTime? updatedAt,
-  }) : id = id ?? _generateId(),
-       createdAt = createdAt ?? DateTime.now(),
-       updatedAt = updatedAt ?? DateTime.now();
+  })  : id = id ?? _generateId(),
+        createdAt = createdAt ?? DateTime.now(),
+        updatedAt = updatedAt ?? DateTime.now();
 
   static String _generateId() {
     return DateTime.now().millisecondsSinceEpoch.toString();
@@ -55,16 +54,6 @@ class AppFile {
   bool get isPdf => fileType == FileType.pdf;
   bool get isDocument => fileType == FileType.document;
   bool get isText => fileType == FileType.text;
-  bool get isAudio => fileType == FileType.audio;
-  bool get isVideo => fileType == FileType.video;
-  bool get isArchive => fileType == FileType.archive;
-
-  String get sizeFormatted {
-    if (size < 1024) return '$size B';
-    if (size < 1024 * 1024) return '${(size / 1024).toStringAsFixed(1)} KB';
-    if (size < 1024 * 1024 * 1024) return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
-    return '${(size / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
-  }
 
   AppFile copyWith({
     String? id,
@@ -131,13 +120,29 @@ class AppFile {
       identical(this, other) ||
       other is AppFile &&
           runtimeType == other.runtimeType &&
-          id == other.id;
+          id == other.id &&
+          name == other.name &&
+          extension == other.extension &&
+          size == other.size &&
+          data == other.data &&
+          mimeType == other.mimeType &&
+          description == other.description &&
+          category == other.category &&
+          tags == other.tags &&
+          createdAt == other.createdAt &&
+          updatedAt == other.updatedAt;
 
   @override
-  int get hashCode => id.hashCode;
-
-  @override
-  String toString() {
-    return 'AppFile{id: $id, name: $name, extension: $extension, size: $size}';
-  }
+  int get hashCode =>
+      id.hashCode ^
+      name.hashCode ^
+      extension.hashCode ^
+      size.hashCode ^
+      data.hashCode ^
+      mimeType.hashCode ^
+      description.hashCode ^
+      category.hashCode ^
+      tags.hashCode ^
+      createdAt.hashCode ^
+      updatedAt.hashCode;
 }

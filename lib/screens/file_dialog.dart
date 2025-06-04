@@ -1,4 +1,3 @@
-// lib/screens/file_dialog.dart
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:taskify/models/file.dart';
@@ -35,13 +34,15 @@ class _FileDialogState extends State<FileDialog> {
   @override
   void initState() {
     super.initState();
-    
+
     _nameController = TextEditingController(text: widget.file?.name ?? '');
-    _descriptionController = TextEditingController(text: widget.file?.description ?? '');
+    _descriptionController =
+        TextEditingController(text: widget.file?.description ?? '');
     _newCategoryController = TextEditingController();
     _newTagController = TextEditingController();
-    
-    _selectedCategory = widget.file?.category.isNotEmpty == true ? widget.file!.category : null;
+
+    _selectedCategory =
+        widget.file?.category.isNotEmpty == true ? widget.file!.category : null;
     _tags = List<String>.from(widget.file?.tags ?? []);
     _availableCategories = List<String>.from(widget.categories);
   }
@@ -56,12 +57,12 @@ class _FileDialogState extends State<FileDialog> {
   }
 
   void _addTag() {
-    final tag = _newTagController.text.trim();
-    if (tag.isNotEmpty && !_tags.contains(tag)) {
+    final newTag = _newTagController.text.trim();
+    if (newTag.isNotEmpty && !_tags.contains(newTag)) {
       setState(() {
-        _tags.add(tag);
-        _newTagController.clear();
+        _tags.add(newTag);
       });
+      _newTagController.clear();
     }
   }
 
@@ -72,283 +73,159 @@ class _FileDialogState extends State<FileDialog> {
   }
 
   void _addNewCategory() {
-    final category = _newCategoryController.text.trim();
-    if (category.isNotEmpty && !_availableCategories.contains(category)) {
+    final newCategory = _newCategoryController.text.trim();
+    if (newCategory.isNotEmpty && !_availableCategories.contains(newCategory)) {
       setState(() {
-        _availableCategories.add(category);
-        _selectedCategory = category;
+        _availableCategories.add(newCategory);
+        _selectedCategory = newCategory;
         _isCreatingNewCategory = false;
-        _newCategoryController.clear();
       });
       widget.onCategoriesUpdated(_availableCategories);
+      _newCategoryController.clear();
     }
   }
 
-  void _save() {
-    final name = _nameController.text.trim();
-    if (name.isEmpty) {
+  void _saveFile() {
+    if (_nameController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Введите название файла')),
+        const SnackBar(content: Text('Имя файла не может быть пустым')),
+      );
+      return;
+    }
+
+    if (_selectedCategory == null || _selectedCategory!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Пожалуйста, выберите категорию')),
       );
       return;
     }
 
     final updatedFile = widget.file?.copyWith(
-      name: name,
-      description: _descriptionController.text.trim(),
-      category: _selectedCategory ?? '',
-      tags: _tags,
-    ) ?? AppFile(
-      name: name,
-      extension: 'txt',
-      size: 0,
-      data: Uint8List.fromList(const []),
-      mimeType: 'text/plain',
-      description: _descriptionController.text.trim(),
-      category: _selectedCategory ?? '',
-      tags: _tags,
-    );
+          name: _nameController.text,
+          description: _descriptionController.text,
+          category: _selectedCategory!,
+          tags: _tags,
+          updatedAt: DateTime.now(),
+        ) ??
+        AppFile(
+          name: _nameController.text,
+          extension: '',
+          size: 0,
+          data: Uint8List(0),
+          mimeType: '',
+          description: _descriptionController.text,
+          category: _selectedCategory!,
+          tags: _tags,
+        );
 
     widget.onSave(updatedFile);
-    Navigator.pop(context);
+    Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      child: Container(
-        width: MediaQuery.of(context).size.width * 0.9,
-        constraints: const BoxConstraints(maxHeight: 600),
+    return AlertDialog(
+      title: Text(widget.file == null ? 'Добавить файл' : 'Редактировать файл'),
+      content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Заголовок
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primaryContainer,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(12),
-                  topRight: Radius.circular(12),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    widget.file == null ? Icons.add : Icons.edit,
-                    color: Theme.of(context).colorScheme.onPrimaryContainer,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      widget.file == null ? 'Новый файл' : 'Редактировать файл',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: Theme.of(context).colorScheme.onPrimaryContainer,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
-                    color: Theme.of(context).colorScheme.onPrimaryContainer,
-                  ),
-                ],
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                labelText: 'Имя файла',
+                border: OutlineInputBorder(),
               ),
             ),
-
-            // Содержимое
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Информация о файле
-                    if (widget.file != null) ...[
-                      _buildInfoCard(),
-                      const SizedBox(height: 16),
-                    ],
-
-                    // Название
-                    TextField(
-                      controller: _nameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Название',
-                        hintText: 'Введите название файла',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.drive_file_rename_outline),
-                      ),
-                      textCapitalization: TextCapitalization.words,
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Описание
-                    TextField(
-                      controller: _descriptionController,
-                      decoration: const InputDecoration(
-                        labelText: 'Описание',
-                        hintText: 'Введите описание файла',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.description),
-                      ),
-                      maxLines: 3,
-                      textCapitalization: TextCapitalization.sentences,
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Категория
-                    _buildCategorySection(),
-                    const SizedBox(height: 16),
-
-                    // Теги
-                    _buildTagsSection(),
-                  ],
-                ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _descriptionController,
+              decoration: const InputDecoration(
+                labelText: 'Описание',
+                border: OutlineInputBorder(),
               ),
+              maxLines: 3,
             ),
-
-            // Кнопки действий
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(12),
-                  bottomRight: Radius.circular(12),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Theme.of(context).shadowColor.withAlpha(25),
-                    blurRadius: 4,
-                    offset: const Offset(0, -2),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Отмена'),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: _save,
-                    child: const Text('Сохранить'),
-                  ),
-                ],
-              ),
-            ),
+            const SizedBox(height: 16),
+            _buildCategorySelector(),
+            const SizedBox(height: 16),
+            _buildTagInputSection(),
+            if (widget.file != null) ...[
+              const SizedBox(height: 16),
+              _buildFileInfo(),
+            ],
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildInfoCard() {
-    final file = widget.file!;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                _buildFileTypeIcon(file.fileType),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        file.fullName,
-                        style: Theme.of(context).textTheme.titleMedium,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        _formatFileSize(file.size),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Создан: ${_formatDate(file.createdAt)}',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Отмена'),
         ),
-      ),
+        ElevatedButton(
+          onPressed: _saveFile,
+          child: const Text('Сохранить'),
+        ),
+      ],
     );
   }
 
-  Widget _buildFileTypeIcon(FileType type) {
-    IconData iconData;
-    Color iconColor;
-
-    switch (type) {
-      case FileType.image:
-        iconData = Icons.image;
-        iconColor = Colors.green;
-        break;
-      case FileType.pdf:
-        iconData = Icons.picture_as_pdf;
-        iconColor = Colors.red;
-        break;
-      case FileType.document:
-        iconData = Icons.description;
-        iconColor = Colors.blue;
-        break;
-      case FileType.text:
-        iconData = Icons.text_snippet;
-        iconColor = Colors.grey;
-        break;
-      case FileType.audio:
-        iconData = Icons.audio_file;
-        iconColor = Colors.purple;
-        break;
-      case FileType.video:
-        iconData = Icons.video_file;
-        iconColor = Colors.orange;
-        break;
-      case FileType.archive:
-        iconData = Icons.archive;
-        iconColor = Colors.brown;
-        break;
-      default:
-        iconData = Icons.insert_drive_file;
-        iconColor = Colors.grey;
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: iconColor.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Icon(iconData, color: iconColor, size: 24),
-    );
-  }
-
-  Widget _buildCategorySection() {
+  Widget _buildCategorySelector() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Категория',
-          style: Theme.of(context).textTheme.titleSmall,
+        InputDecorator(
+          decoration: InputDecoration(
+            labelText: 'Категория',
+            border: const OutlineInputBorder(),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            suffixIcon: _isCreatingNewCategory
+                ? IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () {
+                      setState(() {
+                        _isCreatingNewCategory = false;
+                        _newCategoryController.clear();
+                      });
+                    },
+                  )
+                : IconButton(
+                    icon: const Icon(Icons.add),
+                    onPressed: () {
+                      setState(() {
+                        _isCreatingNewCategory = true;
+                        _selectedCategory = null;
+                      });
+                    },
+                  ),
+          ),
+          isEmpty: _selectedCategory == null,
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: _selectedCategory,
+              hint: const Text('Выберите категорию'),
+              isExpanded: true,
+              onChanged: _isCreatingNewCategory
+                  ? null
+                  : (String? newValue) {
+                      setState(() {
+                        _selectedCategory = newValue;
+                      });
+                    },
+              items: _availableCategories.map<DropdownMenuItem<String>>(
+                (String value) {
+                  return DropdownMenuItem<String>(
+                    value: value,
+                    child: Text(value),
+                  );
+                },
+              ).toList(),
+            ),
+          ),
         ),
-        const SizedBox(height: 8),
         if (_isCreatingNewCategory) ...[
+          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
@@ -359,7 +236,6 @@ class _FileDialogState extends State<FileDialog> {
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
-                  textCapitalization: TextCapitalization.words,
                   onSubmitted: (_) => _addNewCategory(),
                 ),
               ),
@@ -367,46 +243,7 @@ class _FileDialogState extends State<FileDialog> {
               IconButton(
                 icon: const Icon(Icons.check),
                 onPressed: _addNewCategory,
-                color: Colors.green,
-              ),
-              IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => setState(() {
-                  _isCreatingNewCategory = false;
-                  _newCategoryController.clear();
-                }),
-                color: Colors.red,
-              ),
-            ],
-          ),
-        ] else ...[
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              // Без категории
-              ChoiceChip(
-                label: const Text('Без категории'),
-                selected: _selectedCategory == null,
-                onSelected: (selected) {
-                  if (selected) {
-                    setState(() => _selectedCategory = null);
-                  }
-                },
-              ),
-              // Существующие категории
-              ..._availableCategories.map((category) => ChoiceChip(
-                label: Text(category),
-                selected: _selectedCategory == category,
-                onSelected: (selected) {
-                  setState(() => _selectedCategory = selected ? category : null);
-                },
-              )),
-              // Добавить новую категорию
-              ActionChip(
-                label: const Text('+ Новая'),
-                onPressed: () => setState(() => _isCreatingNewCategory = true),
-                avatar: const Icon(Icons.add, size: 16),
+                color: Theme.of(context).colorScheme.primary,
               ),
             ],
           ),
@@ -415,31 +252,34 @@ class _FileDialogState extends State<FileDialog> {
     );
   }
 
-  Widget _buildTagsSection() {
+  Widget _buildFileInfo() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Теги',
-          style: Theme.of(context).textTheme.titleSmall,
+        Text('Размер: ${_formatFileSize(widget.file!.size)}'),
+        Text('Тип: ${widget.file!.mimeType}'),
+        Text('Создан: ${_formatDate(widget.file!.createdAt)}'),
+        Text('Обновлен: ${_formatDate(widget.file!.updatedAt)}'),
+      ],
+    );
+  }
+
+  Widget _buildTagInputSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Теги:'),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: _tags
+              .map((tag) => Chip(
+                    label: Text(tag),
+                    onDeleted: () => _removeTag(tag),
+                  ))
+              .toList(),
         ),
         const SizedBox(height: 8),
-        
-        // Существующие теги
-        if (_tags.isNotEmpty) ...[
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: _tags.map((tag) => Chip(
-              label: Text('#$tag'),
-              deleteIcon: const Icon(Icons.close, size: 16),
-              onDeleted: () => _removeTag(tag),
-            )).toList(),
-          ),
-          const SizedBox(height: 8),
-        ],
-
-        // Поле для добавления нового тега
         Row(
           children: [
             Expanded(
@@ -470,12 +310,13 @@ class _FileDialogState extends State<FileDialog> {
   String _formatFileSize(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
   String _formatDate(DateTime date) {
-    return '${date.day}.${date.month.toString().padLeft(2, '0')}.${date.year} '
-           '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    return '${date.day}.${date.month}.${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
   }
 }
