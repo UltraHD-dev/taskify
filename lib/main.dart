@@ -1,69 +1,31 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:taskify/screens/task_list_screen.dart';
-import 'package:taskify/screens/file_manager_screen.dart'; 
-import 'package:taskify/theme/app_theme.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:taskify/screens/main_screen.dart';
+import 'package:taskify/services/sync_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await windowManager.ensureInitialized();
   
-  // Инициализация window_manager для десктопных платформ
-  if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
-    await windowManager.ensureInitialized();
-  }
-  
-  runApp(const TaskifyApp());
+  final syncService = await SyncService.initialize();
+
+  runApp(MyApp(syncService: syncService));
 }
 
-class TaskifyApp extends StatefulWidget {
-  const TaskifyApp({super.key});
+class MyApp extends StatelessWidget {
+  final SyncService syncService;
 
-  @override
-  State<TaskifyApp> createState() => _TaskifyAppState();
-}
-
-class _TaskifyAppState extends State<TaskifyApp> {
-  int _selectedIndex = 0; 
-
-  static const List<Widget> _screens = <Widget>[
-    TaskListScreen(),
-    FileManagerScreen(),
-  ];
-
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-  }
+  const MyApp({required this.syncService, super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Taskify - Менеджер задач',
-      theme: AppTheme.lightTheme,
-      debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        body: IndexedStack( 
-          index: _selectedIndex,
-          children: _screens,
-        ),
-        bottomNavigationBar: BottomNavigationBar(
-          items: const <BottomNavigationBarItem>[
-            BottomNavigationBarItem(
-              icon: Icon(Icons.check_box),
-              label: 'Задачи', 
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.folder),
-              label: 'Файлы', 
-            ),
-          ],
-          currentIndex: _selectedIndex,
-          selectedItemColor: Theme.of(context).colorScheme.primary,
-          onTap: _onItemTapped,
-        ),
+      title: 'Taskify',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
       ),
+      home: MainScreen(syncService: syncService),
     );
   }
 }

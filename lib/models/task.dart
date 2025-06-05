@@ -2,70 +2,67 @@ import 'package:uuid/uuid.dart';
 
 class Task {
   final String id;
-  String title;
-  String description;
-  DateTime? dueDate;
-  bool isCompleted;
-  String category;
-  DateTime createdAt;
-  DateTime updatedAt;
+  final String title;
+  final String description;
+  final String category;
+  final DateTime? dueDate;
+  final bool isCompleted;
+  final DateTime createdAt;
+  final DateTime modifiedAt;
 
   Task({
     String? id,
     required this.title,
-    this.description = '',
+    required this.description,
+    this.category = '',
     this.dueDate,
     this.isCompleted = false,
-    this.category = '',
     DateTime? createdAt,
-    DateTime? updatedAt,
+    DateTime? modifiedAt,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now(),
-        updatedAt = updatedAt ?? DateTime.now();
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'title': title,
-      'description': description,
-      'dueDate': dueDate?.toIso8601String(),
-      'isCompleted': isCompleted,
-      'category': category,
-      'createdAt': createdAt.toIso8601String(),
-      'updatedAt': updatedAt.toIso8601String(),
-    };
-  }
-
-  factory Task.fromJson(Map<String, dynamic> json) {
-    return Task(
-      id: json['id'],
-      title: json['title'],
-      description: json['description'] ?? '',
-      dueDate: json['dueDate'] != null ? DateTime.parse(json['dueDate']) : null,
-      isCompleted: json['isCompleted'] ?? false,
-      category: json['category'] ?? '',
-      createdAt: DateTime.parse(json['createdAt']),
-      updatedAt: DateTime.parse(json['updatedAt']),
-    );
-  }
+        modifiedAt = modifiedAt ?? DateTime.now();
 
   Task copyWith({
     String? title,
     String? description,
+    String? category,
     DateTime? dueDate,
     bool? isCompleted,
-    String? category,
-    DateTime? updatedAt,
   }) {
     return Task(
       id: id,
       title: title ?? this.title,
       description: description ?? this.description,
+      category: category ?? this.category,
       dueDate: dueDate ?? this.dueDate,
       isCompleted: isCompleted ?? this.isCompleted,
-      category: category ?? this.category,
       createdAt: createdAt,
-      updatedAt: updatedAt ?? DateTime.now(),
+      modifiedAt: DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'description': description,
+        'category': category,
+        'dueDate': dueDate?.toIso8601String(),
+        'isCompleted': isCompleted,
+        'createdAt': createdAt.toIso8601String(),
+        'modifiedAt': modifiedAt.toIso8601String(),
+      };
+
+  factory Task.fromJson(Map<String, dynamic> json) {
+    return Task(
+      id: json['id'],
+      title: json['title'],
+      description: json['description'],
+      category: json['category'] ?? '',
+      dueDate: json['dueDate'] != null ? DateTime.parse(json['dueDate']) : null,
+      isCompleted: json['isCompleted'] ?? false,
+      createdAt: DateTime.parse(json['createdAt']),
+      modifiedAt: DateTime.parse(json['modifiedAt']),
     );
   }
 }
