@@ -7,10 +7,7 @@ import 'package:taskify/services/sync_service.dart';
 class TaskListScreen extends StatefulWidget {
   final SyncService syncService;
 
-  const TaskListScreen({
-    super.key,
-    required this.syncService,
-  });
+  const TaskListScreen({required this.syncService, super.key});
 
   @override
   State<TaskListScreen> createState() => _TaskListScreenState();
@@ -24,7 +21,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
   String _searchQuery = '';
   String? _selectedCategory;
   bool _isLoading = true;
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  bool _showCompleted = true;
 
   @override
   void initState() {
@@ -38,9 +35,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
       await _loadTasks();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка инициализации: $e')),
-        );
+        _showError('Ошибка инициализации: $e');
       }
     }
   }
@@ -63,9 +58,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
       if (!mounted) return;
       
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка загрузки задач: $e')),
-      );
+      _showError('Ошибка загрузки задач: $e');
     }
   }
 
@@ -81,6 +74,8 @@ class _TaskListScreenState extends State<TaskListScreen> {
 
   void _applyFilters() {
     _filteredTasks = _allTasks.where((task) {
+      if (!_showCompleted && task.isCompleted) return false;
+
       final matchesSearch = _searchQuery.isEmpty ||
           task.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           task.description.toLowerCase().contains(_searchQuery.toLowerCase());
@@ -144,11 +139,9 @@ class _TaskListScreenState extends State<TaskListScreen> {
     try {
       await _taskStorage.saveTask(task);
       await _loadTasks();
+      _showSuccess('Задача сохранена');
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка сохранения задачи: $e')),
-      );
+      _showError('Ошибка сохранения задачи: $e');
     }
   }
 
@@ -178,32 +171,48 @@ class _TaskListScreenState extends State<TaskListScreen> {
       try {
         await _taskStorage.deleteTask(task.id);
         await _loadTasks();
+        _showSuccess('Задача удалена');
       } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка удаления задачи: $e')),
-        );
+        _showError('Ошибка удаления задачи: $e');
       }
     }
   }
 
   Future<void> _toggleTaskComplete(Task task) async {
-    final updatedTask = task.copyWith(
-      isCompleted: !task.isCompleted,
-    );
+    final updatedTask = task.copyWith(isCompleted: !task.isCompleted);
     await _saveTask(updatedTask);
+  }
+
+  void _showSuccess(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      key: _scaffoldKey,
       appBar: AppBar(
         title: const Text('Задачи'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadTasks,
+            tooltip: 'Обновить',
           ),
         ],
       ),
@@ -211,49 +220,69 @@ class _TaskListScreenState extends State<TaskListScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          decoration: const InputDecoration(
-                            prefixIcon: Icon(Icons.search),
-                            hintText: 'Поиск задач...',
-                            border: OutlineInputBorder(),
-                          ),
+                Card(
+                  margin: const EdgeInsets.all(16),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                decoration: const InputDecoration(
+                                  labelText: 'Поиск',
+                                  prefixIcon: Icon(Icons.search),
+                                  border: OutlineInputBorder(),
+                                ),
+                                onChanged: (value) {
+                                  setState(() {
+                                    _searchQuery = value;
+                                    _applyFilters();
+                                  });
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            DropdownButton<String>(
+                              value: _selectedCategory,
+                              hint: const Text('Категория'),
+                              items: [
+                                const DropdownMenuItem<String>(
+                                  value: null,
+                                  child: Text('Все категории'),
+                                ),
+                                ..._categories.map((category) {
+                                  return DropdownMenuItem<String>(
+                                    value: category,
+                                    child: Text(category),
+                                  );
+                                }),
+                              ],
+                              onChanged: (value) {
+                                setState(() {
+                                  _selectedCategory = value;
+                                  _applyFilters();
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        CheckboxListTile(
+                          value: _showCompleted,
                           onChanged: (value) {
                             setState(() {
-                              _searchQuery = value;
+                              _showCompleted = value!;
                               _applyFilters();
                             });
                           },
+                          title: const Text('Показывать завершенные задачи'),
+                          contentPadding: EdgeInsets.zero,
+                          controlAffinity: ListTileControlAffinity.leading,
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      DropdownButton<String>(
-                        value: _selectedCategory,
-                        hint: const Text('Категория'),
-                        items: [
-                          const DropdownMenuItem<String>(
-                            value: null,
-                            child: Text('Все категории'),
-                          ),
-                          ..._categories.map((category) {
-                            return DropdownMenuItem<String>(
-                              value: category,
-                              child: Text(category),
-                            );
-                          }),
-                        ],
-                        onChanged: (value) {
-                          setState(() {
-                            _selectedCategory = value;
-                            _applyFilters();
-                          });
-                        },
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
                 Expanded(
@@ -263,63 +292,75 @@ class _TaskListScreenState extends State<TaskListScreen> {
                             _searchQuery.isEmpty && _selectedCategory == null
                                 ? 'Нет задач'
                                 : 'Ничего не найдено',
+                            style: Theme.of(context).textTheme.titleMedium,
                           ),
                         )
                       : ListView.builder(
                           itemCount: _filteredTasks.length,
                           itemBuilder: (context, index) {
                             final task = _filteredTasks[index];
-                            return ListTile(
-                              leading: Checkbox(
-                                value: task.isCompleted,
-                                onChanged: (_) => _toggleTaskComplete(task),
+                            return Card(
+                              margin: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 4,
                               ),
-                              title: Text(
-                                task.title,
-                                style: TextStyle(
-                                  decoration: task.isCompleted
-                                      ? TextDecoration.lineThrough
-                                      : null,
+                              child: ListTile(
+                                leading: Checkbox(
+                                  value: task.isCompleted,
+                                  onChanged: (_) => _toggleTaskComplete(task),
                                 ),
-                              ),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(task.description),
-                                  if (task.category.isNotEmpty)
-                                    Chip(
-                                      label: Text(task.category),
-                                      backgroundColor: Theme.of(context)
-                                          .colorScheme
-                                          .primaryContainer,
-                                    ),
-                                  if (task.dueDate != null)
-                                    Text(
-                                      'Срок: ${task.dueDate!.day}/'
-                                      '${task.dueDate!.month}/'
-                                      '${task.dueDate!.year} '
-                                      '${task.dueDate!.hour}:'
-                                      '${task.dueDate!.minute.toString().padLeft(2, '0')}',
-                                      style: TextStyle(
-                                        color: task.dueDate!.isBefore(DateTime.now())
-                                            ? Colors.red
-                                            : null,
+                                title: Text(
+                                  task.title,
+                                  style: TextStyle(
+                                    decoration: task.isCompleted
+                                        ? TextDecoration.lineThrough
+                                        : null,
+                                  ),
+                                ),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(task.description),
+                                    const SizedBox(height: 4),
+                                    if (task.category.isNotEmpty)
+                                      Chip(
+                                        label: Text(task.category),
+                                        backgroundColor: Theme.of(context)
+                                            .colorScheme
+                                            .primaryContainer,
+                                        padding: EdgeInsets.zero,
+                                        visualDensity: VisualDensity.compact,
                                       ),
+                                    if (task.dueDate != null)
+                                      Text(
+                                        'Срок: ${task.dueDate!.day}/'
+                                        '${task.dueDate!.month}/'
+                                        '${task.dueDate!.year} '
+                                        '${task.dueDate!.hour}:'
+                                        '${task.dueDate!.minute.toString().padLeft(2, '0')}',
+                                        style: TextStyle(
+                                          color: task.dueDate!.isBefore(DateTime.now())
+                                              ? Colors.red
+                                              : null,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.edit),
+                                      onPressed: () => _editTask(task),
+                                      tooltip: 'Редактировать',
                                     ),
-                                ],
-                              ),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.edit),
-                                    onPressed: () => _editTask(task),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete),
-                                    onPressed: () => _deleteTask(task),
-                                  ),
-                                ],
+                                    IconButton(
+                                      icon: const Icon(Icons.delete),
+                                      onPressed: () => _deleteTask(task),
+                                      tooltip: 'Удалить',
+                                    ),
+                                  ],
+                                ),
                               ),
                             );
                           },
@@ -327,9 +368,10 @@ class _TaskListScreenState extends State<TaskListScreen> {
                 ),
               ],
             ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: _addTask,
-        child: const Icon(Icons.add),
+        label: const Text('Добавить задачу'),
+        icon: const Icon(Icons.add),
       ),
     );
   }

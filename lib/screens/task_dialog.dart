@@ -22,20 +22,20 @@ class TaskDialog extends StatefulWidget {
 class _TaskDialogState extends State<TaskDialog> {
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
-  late String _selectedCategory;
-  DateTime? _selectedDueDate;
-  TimeOfDay? _selectedDueTime;
+  late TextEditingController _categoryController;
+  DateTime? _selectedDate;
+  TimeOfDay? _selectedTime;
   bool _isCompleted = false;
-  final _formKey = GlobalKey<FormState>();
+  bool _showCategoryInput = false;
 
   @override
   void initState() {
     super.initState();
     _titleController = TextEditingController(text: widget.task?.title ?? '');
     _descriptionController = TextEditingController(text: widget.task?.description ?? '');
-    _selectedCategory = widget.task?.category ?? '';
-    _selectedDueDate = widget.task?.dueDate;
-    _selectedDueTime = widget.task?.dueDate != null
+    _categoryController = TextEditingController();
+    _selectedDate = widget.task?.dueDate;
+    _selectedTime = widget.task?.dueDate != null
         ? TimeOfDay.fromDateTime(widget.task!.dueDate!)
         : null;
     _isCompleted = widget.task?.isCompleted ?? false;
@@ -45,255 +45,206 @@ class _TaskDialogState extends State<TaskDialog> {
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
+    _categoryController.dispose();
     super.dispose();
   }
 
-  Future<void> _selectDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDueDate ?? DateTime.now(),
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
-
-    if (picked != null && mounted) {
-      setState(() {
-        _selectedDueDate = DateTime(
-          picked.year,
-          picked.month,
-          picked.day,
-          _selectedDueTime?.hour ?? 0,
-          _selectedDueTime?.minute ?? 0,
-        );
-      });
+  void _handleSave() {
+    if (_titleController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Введите название задачи')),
+      );
+      return;
     }
-  }
 
-  Future<void> _selectTime(BuildContext context) async {
-    final TimeOfDay? picked = await showTimePicker(
-      context: context,
-      initialTime: _selectedDueTime ?? TimeOfDay.now(),
-    );
-
-    if (picked != null && mounted) {
-      setState(() {
-        _selectedDueTime = picked;
-        if (_selectedDueDate != null) {
-          _selectedDueDate = DateTime(
-            _selectedDueDate!.year,
-            _selectedDueDate!.month,
-            _selectedDueDate!.day,
-            picked.hour,
-            picked.minute,
-          );
-        } else {
-          final now = DateTime.now();
-          _selectedDueDate = DateTime(
-            now.year,
-            now.month,
-            now.day,
-            picked.hour,
-            picked.minute,
-          );
-        }
-      });
+    DateTime? dueDate;
+    if (_selectedDate != null) {
+      dueDate = DateTime(
+        _selectedDate!.year,
+        _selectedDate!.month,
+        _selectedDate!.day,
+        _selectedTime?.hour ?? 0,
+        _selectedTime?.minute ?? 0,
+      );
     }
-  }
-
-  void _addNewCategory(String category) {
-    if (category.isNotEmpty &&
-        !widget.categories.contains(category)) {
-      final updatedCategories = List<String>.from(widget.categories)..add(category);
-      widget.onCategoriesUpdated(updatedCategories);
-      setState(() {
-        _selectedCategory = category;
-      });
-    }
-  }
-
-  void _saveTask() {
-    if (!_formKey.currentState!.validate()) return;
 
     final task = Task(
       id: widget.task?.id,
       title: _titleController.text,
       description: _descriptionController.text,
-      category: _selectedCategory,
-      dueDate: _selectedDueDate,
+      category: _categoryController.text,
+      dueDate: dueDate,
       isCompleted: _isCompleted,
       createdAt: widget.task?.createdAt,
+      modifiedAt: widget.task?.modifiedAt,
     );
-    
+
     widget.onSave(task);
     Navigator.of(context).pop();
+  }
+
+  Future<void> _selectDate() async {
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate ?? DateTime.now(),
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
+    );
+
+    if (pickedDate != null && mounted) {
+      setState(() => _selectedDate = pickedDate);
+      _selectTime();
+    }
+  }
+
+  Future<void> _selectTime() async {
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: _selectedTime ?? TimeOfDay.now(),
+    );
+
+    if (pickedTime != null && mounted) {
+      setState(() => _selectedTime = pickedTime);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      widget.task == null ? 'Новая задача' : 'Редактировать задачу',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ],
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 400),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              widget.task == null ? 'Новая задача' : 'Редактировать задачу',
+              style: Theme.of(context).textTheme.titleLarge,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            TextField(
+              controller: _titleController,
+              decoration: const InputDecoration(
+                labelText: 'Название',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.title),
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _descriptionController,
+              decoration: const InputDecoration(
+                labelText: 'Описание',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.description),
+              ),
+              maxLines: 3,
+            ),
+            const SizedBox(height: 16),
+            if (!_showCategoryInput) ...[
+              DropdownButtonFormField<String>(
+                value: widget.task?.category.isEmpty ?? true ? null : widget.task?.category,
+                decoration: const InputDecoration(
+                  labelText: 'Категория',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.category),
                 ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _titleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Название',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Пожалуйста, введите название задачи';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _descriptionController,
-                  decoration: const InputDecoration(
-                    labelText: 'Описание',
-                    border: OutlineInputBorder(),
-                  ),
-                  maxLines: 3,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Пожалуйста, введите описание задачи';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: _selectedCategory.isEmpty ? null : _selectedCategory,
-                  decoration: const InputDecoration(
-                    labelText: 'Категория',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: [
-                    ...widget.categories.map((category) {
-                      return DropdownMenuItem(
+                items: [
+                  ...widget.categories.map((category) => DropdownMenuItem(
                         value: category,
                         child: Text(category),
-                      );
+                      )),
+                  const DropdownMenuItem(
+                    value: '',
+                    child: Text('Новая категория'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value == '') {
+                    setState(() => _showCategoryInput = true);
+                  } else {
+                    _categoryController.text = value ?? '';
+                  }
+                },
+              ),
+            ] else ...[
+              TextField(
+                controller: _categoryController,
+                decoration: InputDecoration(
+                  labelText: 'Новая категория',
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.add_circle_outline),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => setState(() => _showCategoryInput = false),
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _selectDate,
+                    icon: const Icon(Icons.calendar_today),
+                    label: Text(
+                      _selectedDate == null
+                          ? 'Выбрать дату'
+                          : '${_selectedDate!.day}/${_selectedDate!.month}/${_selectedDate!.year}',
+                    ),
+                  ),
+                ),
+                if (_selectedDate != null) ...[
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => setState(() {
+                      _selectedDate = null;
+                      _selectedTime = null;
                     }),
-                    const DropdownMenuItem(
-                      value: 'new',
-                      child: Text('+ Добавить новую категорию'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value == 'new') {
-                      showDialog(
-                        context: context,
-                        builder: (context) {
-                          final textController = TextEditingController();
-                          return AlertDialog(
-                            title: const Text('Новая категория'),
-                            content: TextField(
-                              controller: textController,
-                              decoration: const InputDecoration(
-                                labelText: 'Название категории',
-                              ),
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.of(context).pop(),
-                                child: const Text('Отмена'),
-                              ),
-                              TextButton(
-                                onPressed: () {
-                                  _addNewCategory(textController.text);
-                                  Navigator.of(context).pop();
-                                },
-                                child: const Text('Добавить'),
-                              ),
-                            ],
-                          );
-                        },
-                      );
-                    } else {
-                      setState(() {
-                        _selectedCategory = value ?? '';
-                      });
-                    }
-                  },
+                  ),
+                ],
+              ],
+            ),
+            if (_selectedDate != null) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _selectTime,
+                icon: const Icon(Icons.access_time),
+                label: Text(
+                  _selectedTime == null
+                      ? 'Выбрать время'
+                      : '${_selectedTime!.hour}:${_selectedTime!.minute.toString().padLeft(2, '0')}',
                 ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => _selectDate(context),
-                        icon: const Icon(Icons.calendar_today),
-                        label: Text(
-                          _selectedDueDate != null
-                              ? '${_selectedDueDate!.day}/${_selectedDueDate!.month}/${_selectedDueDate!.year}'
-                              : 'Выбрать дату',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => _selectTime(context),
-                        icon: const Icon(Icons.access_time),
-                        label: Text(
-                          _selectedDueTime != null
-                              ? '${_selectedDueTime!.hour}:${_selectedDueTime!.minute.toString().padLeft(2, '0')}'
-                              : 'Выбрать время',
-                        ),
-                      ),
-                    ),
-                  ],
+              ),
+            ],
+            const SizedBox(height: 16),
+            CheckboxListTile(
+              value: _isCompleted,
+              onChanged: (value) => setState(() => _isCompleted = value!),
+              title: const Text('Завершено'),
+              contentPadding: EdgeInsets.zero,
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Отмена'),
                 ),
-                const SizedBox(height: 16),
-                SwitchListTile(
-                  title: const Text('Завершено'),
-                  value: _isCompleted,
-                  onChanged: (bool value) {
-                    setState(() {
-                      _isCompleted = value;
-                    });
-                  },
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Отмена'),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: _saveTask,
-                      child: const Text('Сохранить'),
-                    ),
-                  ],
+                const SizedBox(width: 16),
+                ElevatedButton(
+                  onPressed: _handleSave,
+                  child: const Text('Сохранить'),
                 ),
               ],
             ),
-          ),
+          ],
         ),
       ),
     );
