@@ -4,9 +4,14 @@ import 'package:window_manager/window_manager.dart';
 import 'package:taskify/screens/main_screen.dart';
 import 'package:taskify/services/sync_service.dart';
 import 'package:taskify/services/theme_service.dart';
+import 'package:taskify/theme/app_theme.dart';
+import 'package:taskify/controllers/animation_controller.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+  
   await windowManager.ensureInitialized();
 
   await windowManager.waitUntilReadyToShow().then((_) async {
@@ -21,11 +26,15 @@ void main() async {
 
   final syncService = await SyncService.initialize();
   final themeService = await ThemeService.initialize();
+  final animationController = CustomAnimationController();
+
+  FlutterNativeSplash.remove();
 
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: themeService),
+        ChangeNotifierProvider.value(value: animationController),
       ],
       child: MyApp(syncService: syncService),
     ),
@@ -45,68 +54,8 @@ class MyApp extends StatelessWidget {
           title: 'Taskify',
           debugShowCheckedModeBanner: false,
           themeMode: themeService.themeMode,
-          theme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: Colors.blue,
-              brightness: Brightness.light,
-            ),
-            useMaterial3: true,
-            appBarTheme: const AppBarTheme(
-              centerTitle: true,
-              elevation: 0,
-              backgroundColor: Colors.transparent,
-            ),
-            elevatedButtonTheme: ElevatedButtonThemeData(
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(120, 45),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-            cardTheme: CardThemeData(
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            dialogTheme: DialogThemeData(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-          darkTheme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: Colors.blue,
-              brightness: Brightness.dark,
-            ),
-            useMaterial3: true,
-            appBarTheme: const AppBarTheme(
-              centerTitle: true,
-              elevation: 0,
-              backgroundColor: Colors.transparent,
-            ),
-            elevatedButtonTheme: ElevatedButtonThemeData(
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(120, 45),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-            cardTheme: CardThemeData(
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            dialogTheme: DialogThemeData(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
           home: MainScreen(syncService: syncService),
         );
       },
