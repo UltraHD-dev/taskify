@@ -1,4 +1,5 @@
 import 'package:uuid/uuid.dart';
+import 'file.dart';
 
 class Task {
   final String id;
@@ -9,6 +10,9 @@ class Task {
   String category;
   DateTime createdAt;
   DateTime updatedAt;
+  Priority priority;
+  List<String> attachedFileIds; // Добавляем связь с файлами
+  List<String> tags; // Добавляем теги для лучшей организации
 
   Task({
     String? id,
@@ -17,6 +21,9 @@ class Task {
     this.dueDate,
     this.isCompleted = false,
     this.category = '',
+    this.priority = Priority.medium,
+    this.attachedFileIds = const [],
+    this.tags = const [],
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : id = id ?? const Uuid().v4(),
@@ -31,6 +38,9 @@ class Task {
       'dueDate': dueDate?.toIso8601String(),
       'isCompleted': isCompleted,
       'category': category,
+      'priority': priority.index,
+      'attachedFileIds': attachedFileIds,
+      'tags': tags,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
     };
@@ -44,6 +54,9 @@ class Task {
       dueDate: json['dueDate'] != null ? DateTime.parse(json['dueDate']) : null,
       isCompleted: json['isCompleted'] ?? false,
       category: json['category'] ?? '',
+      priority: Priority.fromIndex(json['priority'] ?? 1),
+      attachedFileIds: (json['attachedFileIds'] as List<dynamic>?)?.cast<String>() ?? [],
+      tags: (json['tags'] as List<dynamic>?)?.cast<String>() ?? [],
       createdAt: DateTime.parse(json['createdAt']),
       updatedAt: DateTime.parse(json['updatedAt']),
     );
@@ -55,6 +68,9 @@ class Task {
     DateTime? dueDate,
     bool? isCompleted,
     String? category,
+    Priority? priority,
+    List<String>? attachedFileIds,
+    List<String>? tags,
     DateTime? updatedAt,
   }) {
     return Task(
@@ -64,6 +80,9 @@ class Task {
       dueDate: dueDate ?? this.dueDate,
       isCompleted: isCompleted ?? this.isCompleted,
       category: category ?? this.category,
+      priority: priority ?? this.priority,
+      attachedFileIds: attachedFileIds ?? this.attachedFileIds,
+      tags: tags ?? this.tags,
       createdAt: createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
     );

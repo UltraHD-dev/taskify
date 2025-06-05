@@ -1,69 +1,64 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:taskify/screens/task_list_screen.dart';
-import 'package:taskify/screens/file_manager_screen.dart'; 
-import 'package:taskify/theme/app_theme.dart';
+import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:taskify/screens/main_screen.dart';
+import 'package:taskify/services/sync_service.dart';
+import 'package:taskify/services/theme_service.dart';
+import 'package:taskify/theme/app_theme.dart';
+import 'package:taskify/controllers/animation_controller.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   
-  // Инициализация window_manager для десктопных платформ
-  if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
-    await windowManager.ensureInitialized();
-  }
-  
-  runApp(const TaskifyApp());
+  await windowManager.ensureInitialized();
+
+  await windowManager.waitUntilReadyToShow().then((_) async {
+    await windowManager.setMinimumSize(const Size(800, 600));
+    await windowManager.setMaximumSize(const Size(1200, 800));
+    await windowManager.setSize(const Size(1000, 700));
+    await windowManager.center();
+    await windowManager.show();
+    await windowManager.setFullScreen(false);
+    await windowManager.setResizable(true);
+  });
+
+  final syncService = await SyncService.initialize();
+  final themeService = await ThemeService.initialize();
+  final animationController = CustomAnimationController();
+
+  FlutterNativeSplash.remove();
+
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: themeService),
+        ChangeNotifierProvider.value(value: animationController),
+      ],
+      child: MyApp(syncService: syncService),
+    ),
+  );
 }
 
-class TaskifyApp extends StatefulWidget {
-  const TaskifyApp({super.key});
+class MyApp extends StatelessWidget {
+  final SyncService syncService;
 
-  @override
-  State<TaskifyApp> createState() => _TaskifyAppState();
-}
-
-class _TaskifyAppState extends State<TaskifyApp> {
-  int _selectedIndex = 0; 
-
-  static const List<Widget> _screens = <Widget>[
-    TaskListScreen(),
-    FileManagerScreen(),
-  ];
-
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-  }
+  const MyApp({required this.syncService, super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Taskify - Менеджер задач',
-      theme: AppTheme.lightTheme,
-      debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        body: IndexedStack( 
-          index: _selectedIndex,
-          children: _screens,
-        ),
-        bottomNavigationBar: BottomNavigationBar(
-          items: const <BottomNavigationBarItem>[
-            BottomNavigationBarItem(
-              icon: Icon(Icons.check_box),
-              label: 'Задачи', 
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.folder),
-              label: 'Файлы', 
-            ),
-          ],
-          currentIndex: _selectedIndex,
-          selectedItemColor: Theme.of(context).colorScheme.primary,
-          onTap: _onItemTapped,
-        ),
-      ),
+    return Consumer<ThemeService>(
+      builder: (context, themeService, _) {
+        return MaterialApp(
+          title: 'Taskify',
+          debugShowCheckedModeBanner: false,
+          themeMode: themeService.themeMode,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          home: MainScreen(syncService: syncService),
+        );
+      },
     );
   }
 }
