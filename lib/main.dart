@@ -40,7 +40,7 @@ class _TaskifyAppState extends State<TaskifyApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Taskify - Менеджер задач',
+      title: 'Taskify - Твой Менеджер задач',
       theme: AppTheme.lightTheme,
       debugShowCheckedModeBanner: false,
       home: Scaffold(
