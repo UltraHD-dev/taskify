@@ -7,6 +7,7 @@ import 'package:taskify/models/task.dart';
 import 'package:taskify/screens/task_dialog.dart';
 import 'package:taskify/widgets/qr_scanner.dart';
 import 'package:taskify/widgets/task_tile.dart' as tile;
+import 'package:taskify/service/yandex_disk_sync.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:window_manager/window_manager.dart';
@@ -25,6 +26,8 @@ class _TaskListScreenState extends State<TaskListScreen> with WindowListener {
   final FlutterLocalNotificationsPlugin notificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
+  final YandexDiskSync _syncService = YandexDiskSync();
+
   @override
   void initState() {
     super.initState();
@@ -36,7 +39,10 @@ class _TaskListScreenState extends State<TaskListScreen> with WindowListener {
 
     tz.initializeTimeZones();
     _initNotifications();
-    _loadTasks().then((_) => _checkExpiredTasks());
+    _loadTasks().then((_) {
+      _checkExpiredTasks();
+      _syncTasks();
+    });
   }
 
   @override
@@ -77,24 +83,24 @@ class _TaskListScreenState extends State<TaskListScreen> with WindowListener {
 
   Future<void> _loadTasks() async {
     final prefs = await SharedPreferences.getInstance();
-    
+
     // Загружаем задачи
     final tasksJson = prefs.getString('tasks');
     // Загружаем категории отдельно
     final categoriesJson = prefs.getStringList('categories');
-    
+
     if (tasksJson != null) {
       try {
         final List<dynamic> decoded = jsonDecode(tasksJson);
         if (mounted) {
           setState(() {
             tasks = decoded.map((t) => Task.fromJson(t)).toList();
-            
+
             // Загружаем сохраненные категории
             if (categoriesJson != null) {
               categories = List<String>.from(categoriesJson);
             }
-            
+
             // Обновляем список категорий из задач
             _updateCategoriesFromTasks();
           });
@@ -113,6 +119,20 @@ class _TaskListScreenState extends State<TaskListScreen> with WindowListener {
         setState(() {
           categories = List<String>.from(categoriesJson);
         });
+      }
+    }
+  }
+
+  Future<void> _syncTasks() async {
+    if (await _syncService.isAuthenticated() && await _syncService.isSyncEnabled()) {
+      final success = await _syncService.syncTasks(tasks);
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Задачи синхронизированы'),
+            backgroundColor: Colors.green,
+          ),
+        );
       }
     }
   }

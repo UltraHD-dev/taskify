@@ -1,7 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:taskify/screens/task_list_screen.dart';
-import 'package:taskify/screens/file_manager_screen.dart'; 
+import 'package:taskify/screens/file_manager_screen.dart';
+import 'package:taskify/screens/settings_screen.dart';
 import 'package:taskify/theme/app_theme.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -29,6 +30,7 @@ class _TaskifyAppState extends State<TaskifyApp> {
   static const List<Widget> _screens = <Widget>[
     TaskListScreen(),
     FileManagerScreen(),
+    SettingsScreen(),
   ];
 
   void _onItemTapped(int index) {
@@ -57,6 +59,10 @@ class _TaskifyAppState extends State<TaskifyApp> {
             BottomNavigationBarItem(
               icon: Icon(Icons.folder),
               label: 'Файлы', 
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.settings),
+              label: 'Настройки',
             ),
           ],
           currentIndex: _selectedIndex,
